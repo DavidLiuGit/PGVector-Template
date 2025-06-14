@@ -27,8 +27,9 @@ class BaseDocument(Base):
     Each row represents a single retrievable document (could be chunk or full doc).
 
     Glossary:
-    `corpus` - a full text document, consisting of 1-or-more documents. `corpus_id` is associated with these entries
-    `document` - a chunk (or entirety) of an corpus. `id` is associated with these chunks
+    - `corpus` - a full text document, consisting of 1-or-more documents. 
+      - `corpus_id` is associated with these entries
+    - `document` - a chunk (or entirety) of an corpus. `id` is associated with these chunks
     """
 
     __abstract__ = True
@@ -49,7 +50,7 @@ class BaseDocument(Base):
     """String content of the chunk"""
     title = Column(String(500))
     """Optional chunk title/summary"""
-    metadata = Column(JSONB, nullable=False, default=dict)
+    document_metadata = Column(JSONB, nullable=False, default=dict)
     """Flexible metadata as JSON"""
     origin_url = Column(String(2048), nullable=True)
     """Optional source URL"""

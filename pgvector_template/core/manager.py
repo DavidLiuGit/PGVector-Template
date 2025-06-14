@@ -31,7 +31,7 @@ class BaseDocumentManager(ABC):
             return {
                 "id": full_doc.original_id,
                 "content": full_doc.content,
-                "metadata": full_doc.metadata,
+                "metadata": full_doc.document_metadata,
                 "chunks": [{"id": c.id, "index": c.chunk_index, "title": c.title} for c in chunks if c.chunk_index > 0],
             }
 
@@ -40,7 +40,7 @@ class BaseDocumentManager(ABC):
         return {
             "id": corpus_id,
             "content": reconstructed_content,
-            "metadata": chunks[0].metadata,  # Use first chunk's metadata
+            "metadata": chunks[0].document_metadata,  # Use first chunk's metadata
             "chunks": [{"id": c.id, "index": c.chunk_index, "title": c.title} for c in chunks],
         }
 
