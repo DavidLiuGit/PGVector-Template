@@ -15,6 +15,7 @@ from typing import Any, Optional
 @dataclass
 class RetrievalResult:
     """Standardized result structure for all retrieval operations"""
+
     document_id: str
     original_id: str
     chunk_index: int
@@ -23,7 +24,7 @@ class RetrievalResult:
     metadata: dict[str, Any]
     similarity_score: Optional[float] = None
     keyword_matches: Optional[list[str]] = None
-    
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -31,18 +32,14 @@ class RetrievalResult:
 @dataclass
 class SearchQuery:
     """Standardized search query structure"""
+
     text: Optional[str] = None
     keywords: Optional[list[str]] = None
     metadata_filters: Optional[dict[str, Any]] = None
     date_range: Optional[tuple[datetime, datetime]] = None
     limit: int = 10
     # strategy: RetrievalStrategy = RetrievalStrategy.HYBRID
-    
+
     def validate(self) -> bool:
         """Ensure query has at least one search criterion"""
-        return any([
-            self.text,
-            self.keywords,
-            self.metadata_filters,
-            self.date_range
-        ])
+        return any([self.text, self.keywords, self.metadata_filters, self.date_range])
