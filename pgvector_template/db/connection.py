@@ -3,9 +3,8 @@ from logging import getLogger
 from typing import Type
 
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import DeclarativeMeta
-from sqlalchemy.sql.schema import MetaData
 
 
 class DatabaseManager:
@@ -33,7 +32,7 @@ class DatabaseManager:
 
         self.logger.info(f"Created schema: {schema_name}")
 
-    def create_tables(self, base_class: Type[DeclarativeMeta] | MetaData, schema_name: str) -> None:
+    def create_tables(self, base_class: Type[DeclarativeMeta], schema_name: str) -> None:
         """Create tables for a specific schema"""
         base_class.metadata.create_all(self.engine, checkfirst=True)
         self.logger.info(f"Created tables for schema: {schema_name}")
