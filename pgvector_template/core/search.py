@@ -19,12 +19,12 @@ class BaseSearchClient(ABC, Generic[DocumentType]):
     @abstractmethod
     def search(self, query: SearchQuery) -> list[RetrievalResult]:
         """Main search interface"""
-        pass
+        raise NotImplementedError("Subclasses must implement this method")
 
     @abstractmethod
     def get_full_document(self, original_id: str) -> Optional[dict[str, Any]]:
         """Reconstruct full document from chunks"""
-        pass
+        raise NotImplementedError("Subclasses must implement this method")
 
     # Template methods with default implementations
     def similarity_search(self, text: str, limit: int = 10) -> list[RetrievalResult]:
