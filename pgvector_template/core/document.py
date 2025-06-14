@@ -14,7 +14,7 @@ from sqlalchemy import (
     Index,
     text,
 )
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from pgvector.sqlalchemy import Vector
 
@@ -71,9 +71,9 @@ class BaseDocument(Base):
     is_deleted = Column(Boolean, default=False)
     """Entries can be logically marked for deletion before they are permanently deleted."""
 
-    Index("ix_corpus_chunk", "corpus_id", "chunk_index")
-    Index("ix_content_trgm", text("content gin_trgm_ops"), postgresql_using="gin")  # For fuzzy text search
-    Index("ix_metadata_gin", "metadata", postgresql_using="gin")
+    # Index("ix_corpus_chunk", "corpus_id", "chunk_index")
+    # Index("ix_content_trgm", text("content gin_trgm_ops"), postgresql_using="gin")  # For fuzzy text search
+    # Index("ix_metadata_gin", "metadata", postgresql_using="gin")
 
 
 @dataclass
