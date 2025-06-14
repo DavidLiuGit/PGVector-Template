@@ -9,7 +9,6 @@ description = "Template library for flexible PGVector RAG implementations"
 authors = [{ name="DL", email="v49t9zpqd@mozmail.com" }]
 license = { text = "MIT" }
 dependencies = [
-    "langchain>=0.3.24,<0.4.0",
     "psycopg[binary]>=3.1.0",
     "pgvector>=0.2.0",
     "pydantic>=2.11,<3.0",
