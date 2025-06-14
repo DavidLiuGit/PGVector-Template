@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pgvector-template"
+version = "0.1.0"
+description = "Template library for flexible PGVector RAG implementations"
+authors = [{ name="DL", email="v49t9zpqd@mozmail.com" }]
+license = { text = "MIT" }
+dependencies = [
+    "langchain>=0.3.24,<0.4.0",
+    "psycopg[binary]>=3.1.0",
+    "pgvector>=0.2.0",
+    "pydantic>=2.11,<3.0",
+    "sqlalchemy>=2.0.0",
+    "typing-extensions>=4.0.0",
+]
+readme = "README.md"
+requires-python = ">=3.11"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.optional-dependencies]
+test = [
+  "python-dotenv",
+]
+
+[project.urls]
+Homepage = "https://github.com/DavidLiuGit/PGVector-Template"
+
+
+[tool.setuptools.packages.find]
+where = ["."]  # Look for packages in the root directory
+include = ["pgvector_template*"]  # Include all packages starting with pgvector_template
+
+
+[tool.black]
+line-length = 120
+target-version = ["py311", "py312", "py313"]
