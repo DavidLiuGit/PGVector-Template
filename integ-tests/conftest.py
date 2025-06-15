@@ -5,9 +5,11 @@ Configuration for integration tests
 import os
 import pytest
 from dotenv import load_dotenv
+from pathlib import Path
 
-# Load environment variables from .env file
-load_dotenv()
+# Get the directory where conftest.py is located, and load its .env file
+INTEG_TEST_DIR = Path(__file__).parent.absolute()
+load_dotenv(INTEG_TEST_DIR / ".env")
 
 
 # Fixture for database URL - will be implemented by the user
