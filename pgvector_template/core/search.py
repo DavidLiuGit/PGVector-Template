@@ -2,8 +2,9 @@ from abc import ABC, abstractmethod
 from logging import getLogger
 from typing import Any, Generic, Optional
 
-from pgvector_template.core.embedder import BaseEmbeddingProvider
-from pgvector_template.core.retriever import RetrievalResult, SearchQuery
+from sqlalchemy import text
+
+from pgvector_template.core import BaseEmbeddingProvider, RetrievalResult, SearchQuery, BaseDocument
 from pgvector_template.types import DocumentType
 from sqlalchemy.orm import Session
 
@@ -20,6 +21,27 @@ class BaseSearchClient(ABC, Generic[DocumentType]):
     def search(self, query: SearchQuery) -> list[RetrievalResult]:
         """Main search interface"""
         raise NotImplementedError("Subclasses must implement this method")
+
+    def search_by_metadata(self, filters: dict[str, Any], limit: int = 10) -> list[BaseDocument]:
+        """Generic JSON-based metadata search"""
+        query = self.session.query(BaseDocument).filter(BaseDocument.is_deleted == False)
+
+        # Apply JSON-based filters
+        for key, value in filters.items():
+            if isinstance(value, list):
+                # Array contains search
+                query = query.filter(text(f"metadata->>'{key}' = ANY(:value)")).params(value=value)
+            elif isinstance(value, dict):
+                # Nested JSON search
+                for nested_key, nested_value in value.items():
+                    query = query.filter(text(f"metadata->'{key}'->>'{nested_key}' = :value")).params(
+                        value=nested_value
+                    )
+            else:
+                # Simple equality
+                query = query.filter(text(f"metadata->>'{key}' = :value")).params(value=str(value))
+
+        return query.limit(limit).all()
 
     @abstractmethod
     def get_full_document(self, original_id: str) -> Optional[dict[str, Any]]:

@@ -12,9 +12,9 @@ class BaseEmbeddingProvider(ABC):
     @abstractmethod
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for multiple texts efficiently"""
-        raise NotImplementedError("Subclasses must implement embed_text method")
+        raise NotImplementedError("Subclasses must implement embed_batch method")
 
     @abstractmethod
     def get_dimensions(self) -> int:
-        """Return embedding vector dimensions"""
-        raise NotImplementedError("Subclasses must implement embed_text method")
+        """Return embedding vector dimensions count"""
+        raise NotImplementedError("Subclasses must implement get_dimensions method")
