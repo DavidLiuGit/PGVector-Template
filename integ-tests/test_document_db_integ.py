@@ -28,10 +28,10 @@ class TestTempDocumentDatabaseManagerIntegration:
             database_url=database_url, schema_suffix="integ_test", document_classes=document_classes
         )
 
-    def test_create_temp_schema(self, temp_db_manager):
+    def test_create_temp_schema(self, temp_db_manager: TempDocumentDatabaseManager):
         """Test creating a temporary schema with tables"""
         # Create temporary schema
-        temp_schema = temp_db_manager.create_temp_schema()
+        temp_schema = temp_db_manager.setup()
 
         try:
             # Verify schema exists
@@ -53,15 +53,15 @@ class TestTempDocumentDatabaseManagerIntegration:
                 assert required_columns.issubset(columns), f"Missing required columns: {required_columns - columns}"
         finally:
             # Clean up
-            temp_db_manager.cleanup_temp_schema(temp_schema)
+            temp_db_manager.cleanup(temp_schema)
 
-    def test_cleanup_temp_schema(self, temp_db_manager):
+    def test_cleanup_temp_schema(self, temp_db_manager: TempDocumentDatabaseManager):
         """Test cleaning up a temporary schema"""
         # Create temporary schema
-        temp_schema = temp_db_manager.create_temp_schema()
+        temp_schema = temp_db_manager.setup()
 
         # Clean up schema
-        temp_db_manager.cleanup_temp_schema(temp_schema)
+        temp_db_manager.cleanup(temp_schema)
 
         # Verify schema no longer exists
         with temp_db_manager.engine.connect() as conn:
@@ -71,7 +71,7 @@ class TestTempDocumentDatabaseManagerIntegration:
             )
             assert result.scalar() is None, f"Schema {temp_schema} still exists after cleanup"
 
-    def test_multiple_document_classes(self, database_url):
+    def test_multiple_document_classes(self, database_url: str):
         """Test creating schema with multiple document classes"""
         multi_doc_manager = TempDocumentDatabaseManager(
             database_url=database_url,
@@ -80,7 +80,7 @@ class TestTempDocumentDatabaseManagerIntegration:
         )
 
         # Create temporary schema
-        temp_schema = multi_doc_manager.create_temp_schema()
+        temp_schema = multi_doc_manager.setup()
 
         try:
             # Verify both tables exist
@@ -90,4 +90,4 @@ class TestTempDocumentDatabaseManagerIntegration:
             assert "second_test_documents" in tables, "Table 'second_test_documents' not found"
         finally:
             # Clean up
-            multi_doc_manager.cleanup_temp_schema(temp_schema)
+            multi_doc_manager.cleanup(temp_schema)

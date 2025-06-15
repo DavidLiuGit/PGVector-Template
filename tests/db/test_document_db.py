@@ -69,7 +69,7 @@ class TestTempDocumentDatabaseManager(unittest.TestCase):
         mock_uuid4.return_value = mock_uuid
 
         # Call the method under test
-        result = self.db_manager.create_temp_schema()
+        result = self.db_manager.setup()
 
         # Expected schema name
         expected_schema = f"temp_{DocumentDatabaseManager.SCHEMA_PREFIX}{self.db_manager.schema_name}_abcdef12"
@@ -95,7 +95,7 @@ class TestTempDocumentDatabaseManager(unittest.TestCase):
         self.db_manager.engine.connect.return_value.__enter__.return_value = mock_conn
 
         # Call the method under test
-        self.db_manager.cleanup_temp_schema(temp_schema)
+        self.db_manager.cleanup(temp_schema)
 
         # Assertions
         mock_text.assert_called_once_with(f"DROP SCHEMA IF EXISTS {temp_schema} CASCADE")
@@ -109,7 +109,7 @@ class TestTempDocumentDatabaseManager(unittest.TestCase):
 
         # Call the method under test and assert it raises ValueError
         with self.assertRaises(ValueError) as context:
-            self.db_manager.cleanup_temp_schema(unsafe_schema)
+            self.db_manager.cleanup(unsafe_schema)
 
         self.assertIn("Can only drop schemas with 'temp_' prefix", str(context.exception))
 

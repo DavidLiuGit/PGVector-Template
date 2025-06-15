@@ -53,7 +53,7 @@ class DocumentDatabaseManager(DatabaseManager):
 
 
 class TempDocumentDatabaseManager(DocumentDatabaseManager):
-    def create_temp_schema(self) -> str:
+    def setup(self) -> str:
         """
         Create a temporary schema with a unique name for testing
         Format: `temp_knowledge_base_<schema_suffix>_<uuid_snippet>`
@@ -73,7 +73,7 @@ class TempDocumentDatabaseManager(DocumentDatabaseManager):
         self.logger.info(f"Created temporary schema: {temp_schema_name}")
         return temp_schema_name
 
-    def cleanup_temp_schema(self, schema_name: str) -> None:
+    def cleanup(self, schema_name: str) -> None:
         """Drop a temporary schema and all its objects"""
         if not schema_name.startswith("temp_"):
             raise ValueError("Can only drop schemas with 'temp_' prefix for safety")
