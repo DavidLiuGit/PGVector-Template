@@ -1,9 +1,9 @@
 from contextlib import contextmanager
 from logging import getLogger
-from typing import Type
+from typing import Generator, Type
 
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.ext.declarative import DeclarativeMeta
 
 
@@ -34,6 +34,9 @@ class DatabaseManager:
 
     def create_tables(self, base_class: Type[DeclarativeMeta], schema_name: str) -> None:
         """Create tables for a specific schema"""
+        # Ensure all tables in this base class use the specified schema
+        for table in base_class.metadata.tables.values():
+            table.schema = schema_name
         base_class.metadata.create_all(self.engine, checkfirst=True)
         self.logger.info(f"Created tables for schema: {schema_name}")
 
@@ -44,8 +47,15 @@ class DatabaseManager:
             conn.commit()
 
     @contextmanager
-    def get_session(self):
-        """Get a database session with automatic cleanup"""
+    def get_session(self) -> Generator[Session, None, None]:
+        """
+        Get a database session with automatic cleanup. Usage:
+
+        ```python
+        with db_mgr.get_session() as session:
+            # do stuff with the Session here
+        ```
+        """
         session = self.SessionLocal()
         try:
             yield session

@@ -33,6 +33,7 @@ class DocumentDatabaseManager(DatabaseManager):
             document_classes: List of concrete subclasses of BaseDocument
         """
         super().__init__(database_url)
+        self.schema_suffix = schema_suffix
         self.schema_name = f"{self.SCHEMA_PREFIX}{schema_suffix}"
         self.document_classes = document_classes
 
@@ -59,7 +60,7 @@ class TempDocumentDatabaseManager(DocumentDatabaseManager):
         """
         from uuid import uuid4
 
-        temp_schema_name = f"temp_{self.SCHEMA_PREFIX}{self.schema_name}_{uuid4().hex[:8]}"
+        temp_schema_name = f"temp_{self.schema_name}_{uuid4().hex[:8]}"
 
         self.initialize()
         self.create_schema(temp_schema_name)
