@@ -72,7 +72,7 @@ class TestTempDocumentDatabaseManager(unittest.TestCase):
         result = self.db_manager.setup()
 
         # Expected schema name
-        expected_schema = f"temp_{DocumentDatabaseManager.SCHEMA_PREFIX}{self.db_manager.schema_name}_abcdef12"
+        expected_schema = f"temp_{self.db_manager.schema_name}_abcdef12"
 
         # Assertions
         self.assertEqual(result, expected_schema)

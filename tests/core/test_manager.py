@@ -1,12 +1,48 @@
 import unittest
 from unittest.mock import MagicMock, patch
+from typing import Type
 from uuid import uuid4
 
-from pgvector_template.core.manager import BaseDocumentManager
-from pgvector_template.core.document import BaseDocumentMetadata
+from pgvector_template.core.manager import BaseCorpusManager, BaseCorpusManagerConfig
+from pgvector_template.core.document import BaseDocument, BaseDocumentMetadata, BaseDocumentOptionalProps
+from pgvector_template.core.embedder import BaseEmbeddingProvider
 
 
-class ConcreteDocumentManager(BaseDocumentManager):
+class MockDocument(BaseDocument):
+    """Mock document class for testing"""
+
+    __tablename__ = "mock_documents"
+
+
+class MockEmbeddingProvider(BaseEmbeddingProvider):
+    """Mock embedding provider for testing"""
+
+    def embed_text(self, text: str) -> list[float]:
+        return [0.1, 0.2, 0.3]
+
+    def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        return [[0.1, 0.2, 0.3] for _ in texts]
+
+    def get_dimensions(self) -> int:
+        return 3
+
+
+class MockDocumentMetadata(BaseDocumentMetadata):
+    """Mock document metadata for testing"""
+
+    document_type: str = "mock"
+
+
+class MockConfig(BaseCorpusManagerConfig):
+    """Mock configuration for testing"""
+
+    schema_name: str = "test_schema"
+    document_cls: Type[BaseDocument] = MockDocument
+    embedding_provider: Type[BaseEmbeddingProvider] = MockEmbeddingProvider
+    document_metadata: BaseDocumentMetadata = MockDocumentMetadata(document_type="mock")
+
+
+class ConcreteDocumentManager(BaseCorpusManager):
     """Concrete implementation of BaseDocumentManager for testing"""
 
     def create_chunks(self, content, metadata):
@@ -20,13 +56,13 @@ class TestBaseDocumentManager(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures before each test method"""
         self.session = MagicMock()
-        self.schema_name = "test_schema"
-        self.manager = ConcreteDocumentManager(self.session, self.schema_name)
+        self.config = MockConfig()
+        self.manager = ConcreteDocumentManager(self.session, self.config)
 
     def test_init(self):
         """Test initialization of BaseDocumentManager"""
         self.assertEqual(self.manager.session, self.session)
-        self.assertEqual(self.manager.schema_name, self.schema_name)
+        self.assertEqual(self.manager.schema_name, self.config.schema_name)
 
     def test_get_full_corpus_no_chunks(self):
         """Test get_full_corpus when no chunks are found"""
@@ -55,7 +91,7 @@ class TestBaseDocumentManager(unittest.TestCase):
         full_doc.original_id = corpus_id
         full_doc.chunk_index = 0
         full_doc.content = "Full document content"
-        full_doc.metadata = {"key": "value"}
+        full_doc.document_metadata = {"key": "value"}
         full_doc.id = str(uuid4())
         full_doc.title = "Full Document"
 
@@ -78,7 +114,7 @@ class TestBaseDocumentManager(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result["id"], full_doc.original_id)
         self.assertEqual(result["content"], full_doc.content)
-        self.assertEqual(result["metadata"], full_doc.metadata)
+        self.assertEqual(result["metadata"], full_doc.document_metadata)
         self.assertEqual(len(result["chunks"]), 1)
         self.assertEqual(result["chunks"][0]["id"], chunk1.id)
         self.assertEqual(result["chunks"][0]["index"], chunk1.chunk_index)
@@ -91,13 +127,14 @@ class TestBaseDocumentManager(unittest.TestCase):
         chunk1 = MagicMock()
         chunk1.chunk_index = 1
         chunk1.content = "Chunk 1 content"
-        chunk1.metadata = {"key": "value"}
+        chunk1.document_metadata = {"key": "value"}
         chunk1.id = str(uuid4())
         chunk1.title = "Chunk 1"
 
         chunk2 = MagicMock()
         chunk2.chunk_index = 2
         chunk2.content = "Chunk 2 content"
+        chunk2.document_metadata = {"key": "value"}
         chunk2.id = str(uuid4())
         chunk2.title = "Chunk 2"
 
@@ -115,90 +152,172 @@ class TestBaseDocumentManager(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result["id"], corpus_id)
         self.assertEqual(result["content"], "Chunk 1 content\nChunk 2 content")
-        self.assertEqual(result["metadata"], chunk1.metadata)
+        self.assertEqual(result["metadata"], chunk1.document_metadata)
         self.assertEqual(len(result["chunks"]), 2)
 
-    def test_search_by_metadata_simple_filter(self):
-        """Test search_by_metadata with simple filter"""
-        # Setup
-        filters = {"category": "test"}
-        limit = 5
-        expected_results = ["result1", "result2"]
+    def test_insert_documents_success(self):
+        """Test successful insertion of documents"""
+        # Setup test data
+        corpus_id = uuid4()
+        document_contents = ["Document 1", "Document 2", "Document 3"]
+        document_embeddings = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]]
+        corpus_metadata = {"source": "test", "author": "tester"}
+        optional_props = BaseDocumentOptionalProps(title="Test Document", collection="test_collection")
 
-        # Mock query chain
-        mock_query = MagicMock()
-        self.session.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
-        mock_query.params.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.all.return_value = expected_results
+        # Mock the document creation
+        with patch.object(MockDocument, "from_props") as mock_from_props:
+            # Call the method under test
+            result = self.manager.insert_documents(
+                corpus_id, document_contents, document_embeddings, corpus_metadata, optional_props
+            )
 
+            # Assertions
+            self.assertEqual(result, 3)  # Should return the number of documents inserted
+            self.assertEqual(mock_from_props.call_count, 3)
+
+            # Verify the calls to from_props with correct arguments
+            calls = mock_from_props.call_args_list
+            for i, call in enumerate(calls):
+                args, kwargs = call
+                self.assertEqual(kwargs["corpus_id"], corpus_id)
+                self.assertEqual(kwargs["chunk_index"], i)
+                self.assertEqual(kwargs["content"], document_contents[i])
+                self.assertEqual(kwargs["embedding"], document_embeddings[i])
+                self.assertEqual(kwargs["optional_props"], optional_props)
+                # Check that metadata includes both corpus metadata and chunk metadata
+                self.assertIn("source", kwargs["metadata"])
+                self.assertIn("author", kwargs["metadata"])
+                self.assertIn("chunk_length", kwargs["metadata"])
+
+    def test_insert_documents_mismatch_error(self):
+        """Test error handling when document contents and embeddings don't match"""
+        # Setup test data with mismatched lengths
+        corpus_id = uuid4()
+        document_contents = ["Document 1", "Document 2"]
+        document_embeddings = [[0.1, 0.2, 0.3]]  # Only one embedding for two documents
+        corpus_metadata = {"source": "test"}
+
+        # Verify that ValueError is raised
+        with self.assertRaises(ValueError) as context:
+            self.manager.insert_documents(corpus_id, document_contents, document_embeddings, corpus_metadata)
+
+        self.assertIn("Number of embeddings does not match number of documents", str(context.exception))
+
+    def test_insert_documents_with_extract_chunk_metadata(self):
+        """Test that _extract_chunk_metadata is called for each document"""
+        # Setup test data
+        corpus_id = uuid4()
+        document_contents = ["Short doc", "Longer document content"]
+        document_embeddings = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
+        corpus_metadata = {"source": "test"}
+
+        # Mock the _extract_chunk_metadata method
+        with patch.object(self.manager, "_extract_chunk_metadata") as mock_extract:
+            mock_extract.side_effect = lambda content: {"chunk_length": len(content)}
+
+            # Call the method under test
+            with patch.object(MockDocument, "from_props"):
+                self.manager.insert_documents(corpus_id, document_contents, document_embeddings, corpus_metadata)
+
+            # Verify _extract_chunk_metadata was called for each document
+            self.assertEqual(mock_extract.call_count, 2)
+            mock_extract.assert_any_call("Short doc")
+            mock_extract.assert_any_call("Longer document content")
+
+    def test_insert_corpus(self):
+        """Test insert_corpus method"""
+        # Setup test data
+        content = "Test corpus content"
+        corpus_metadata = {"source": "test", "author": "tester"}
+        optional_props = BaseDocumentOptionalProps(title="Test Corpus")
+
+        # Mock the dependencies
+        with (
+            patch.object(self.manager, "_split_corpus") as mock_split,
+            patch.object(self.config.embedding_provider, "embed_batch") as mock_embed,
+            patch.object(self.manager, "insert_documents") as mock_insert,
+            patch("pgvector_template.core.manager.uuid4") as mock_uuid4,
+        ):
+            # Configure mocks
+            mock_uuid4.return_value = "test-uuid"
+            mock_split.return_value = ["Chunk 1", "Chunk 2"]
+            mock_embed.return_value = [[0.1, 0.2], [0.3, 0.4]]
+            mock_insert.return_value = 2  # Number of documents inserted
+
+            # Call the method under test
+            result = self.manager.insert_corpus(content, corpus_metadata, optional_props)
+
+            # Assertions
+            self.assertEqual(result, 2)  # Should return the result from insert_documents
+            mock_split.assert_called_once_with(content)
+            mock_embed.assert_called_once_with(["Chunk 1", "Chunk 2"])
+            mock_insert.assert_called_once_with(
+                "test-uuid", ["Chunk 1", "Chunk 2"], [[0.1, 0.2], [0.3, 0.4]], corpus_metadata, optional_props
+            )
+
+
+    def test_insert_corpus_empty_content(self):
+        """Test insert_corpus with empty content"""
+        # Setup test data
+        content = ""
+        corpus_metadata = {"source": "test"}
+        optional_props = None
+
+        # Mock the dependencies
+        with patch.object(self.manager, "_split_corpus") as mock_split, \
+             patch.object(self.config.embedding_provider, "embed_batch") as mock_embed, \
+             patch.object(self.manager, "insert_documents") as mock_insert:
+            
+            # Configure mocks
+            mock_split.return_value = []  # Empty content results in no chunks
+            mock_embed.return_value = []  # No embeddings for empty content
+            mock_insert.return_value = 0  # No documents inserted
+
+            # Call the method under test
+            result = self.manager.insert_corpus(content, corpus_metadata, optional_props)
+
+            # Assertions
+            self.assertEqual(result, 0)
+            mock_split.assert_called_once_with(content)
+            mock_embed.assert_called_once_with([])
+            mock_insert.assert_called_once()
+    
+    def test_insert_documents_empty_list(self):
+        """Test insert_documents with empty lists"""
+        # Setup test data
+        corpus_id = uuid4()
+        document_contents = []
+        document_embeddings = []
+        corpus_metadata = {"source": "test"}
+        
         # Call the method under test
-        results = self.manager.search_by_metadata(filters, limit)
-
+        result = self.manager.insert_documents(
+            corpus_id, document_contents, document_embeddings, corpus_metadata
+        )
+        
         # Assertions
-        self.assertEqual(results, expected_results)
-        self.session.query.assert_called_once()
-        self.assertEqual(mock_query.filter.call_count, 2)  # One for is_deleted, one for the filter
-        mock_query.params.assert_called_once()
-        mock_query.limit.assert_called_once_with(limit)
-        mock_query.all.assert_called_once()
-
-    def test_search_by_metadata_list_filter(self):
-        """Test search_by_metadata with list filter"""
-        # Setup
-        filters = {"tags": ["tag1", "tag2"]}
-        expected_results = ["result1"]
-
-        # Mock query chain
-        mock_query = MagicMock()
-        self.session.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
-        mock_query.params.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.all.return_value = expected_results
-
-        # Call the method under test
-        results = self.manager.search_by_metadata(filters)
-
-        # Assertions
-        self.assertEqual(results, expected_results)
-        self.session.query.assert_called_once()
-        self.assertEqual(mock_query.filter.call_count, 2)  # One for is_deleted, one for the filter
-        mock_query.params.assert_called_once()
-        mock_query.limit.assert_called_once_with(10)  # Default limit
-        mock_query.all.assert_called_once()
-
-    def test_search_by_metadata_nested_filter(self):
-        """Test search_by_metadata with nested filter"""
-        # Setup
-        filters = {"author": {"name": "John Doe"}}
-        expected_results = ["result1"]
-
-        # Mock query chain
-        mock_query = MagicMock()
-        self.session.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
-        mock_query.params.return_value = mock_query
-        mock_query.limit.return_value = mock_query
-        mock_query.all.return_value = expected_results
-
-        # Call the method under test
-        results = self.manager.search_by_metadata(filters)
-
-        # Assertions
-        self.assertEqual(results, expected_results)
-        self.session.query.assert_called_once()
-        self.assertEqual(mock_query.filter.call_count, 2)  # One for is_deleted, one for the filter
-        mock_query.params.assert_called_once()
-        mock_query.limit.assert_called_once_with(10)  # Default limit
-        mock_query.all.assert_called_once()
-
-    def test_create_chunks_abstract(self):
-        """Test that create_chunks is implemented in concrete class"""
-        metadata = BaseDocumentMetadata(document_type="test")
-        result = self.manager.create_chunks("Test content", metadata)
-        self.assertEqual(result, [{"chunk": 1}, {"chunk": 2}])
+        self.assertEqual(result, 0)  # Should return 0 for empty lists
+    
+    def test_insert_corpus_embedding_error(self):
+        """Test insert_corpus when embedding fails"""
+        # Setup test data
+        content = "Test content"
+        corpus_metadata = {"source": "test"}
+        optional_props = None
+        
+        # Mock the dependencies
+        with patch.object(self.manager, "_split_corpus") as mock_split, \
+             patch.object(self.config.embedding_provider, "embed_batch") as mock_embed:
+            
+            # Configure mocks
+            mock_split.return_value = ["Chunk 1"]
+            mock_embed.side_effect = Exception("Embedding failed")
+            
+            # Verify that the exception is propagated
+            with self.assertRaises(Exception) as context:
+                self.manager.insert_corpus(content, corpus_metadata, optional_props)
+            
+            self.assertIn("Embedding failed", str(context.exception))
 
 
 if __name__ == "__main__":
