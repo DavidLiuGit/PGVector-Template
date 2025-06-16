@@ -18,8 +18,10 @@ class BaseCorpusManagerConfig(BaseModel):
 
     schema_name: str
     document_cls: Type[BaseDocument]
-    embedding_provider: Type[BaseEmbeddingProvider]
+    embedding_provider: BaseEmbeddingProvider
     document_metadata: BaseDocumentMetadata
+
+    model_config = {"arbitrary_types_allowed": True}
 
 
 class BaseCorpusManager(ABC):
@@ -37,7 +39,7 @@ class BaseCorpusManager(ABC):
     def __init__(
         self,
         session: Session,
-        config: Type[BaseCorpusManagerConfig],
+        config: BaseCorpusManagerConfig,
     ) -> None:
         self.session = session
         self._cfg = config
@@ -125,17 +127,22 @@ class BaseCorpusManager(ABC):
             raise ValueError("Number of embeddings does not match number of documents")
         if len(document_contents) == 0:
             return 0
+        documents_to_insert = []
         for i in range(len(document_contents)):
             chunk_md = self._extract_chunk_metadata(document_contents[i])
-            self.config.document_cls.from_props(
-                corpus_id=corpus_id,
-                chunk_index=i,
-                content=document_contents[i],
-                embedding=document_embeddings[i],
-                metadata=corpus_metadata | chunk_md,
-                optional_props=optional_props,
+            documents_to_insert.append(
+                self.config.document_cls.from_props(
+                    corpus_id=corpus_id,
+                    chunk_index=i,
+                    content=document_contents[i],
+                    embedding=document_embeddings[i],
+                    metadata=corpus_metadata | chunk_md,
+                    optional_props=optional_props,
+                )
             )
-        return i + 1
+        self.session.add_all(documents_to_insert)
+        self.session.commit()
+        return len(documents_to_insert)
 
     def _split_corpus(self, content: str, **kwargs) -> list[str]:
         """

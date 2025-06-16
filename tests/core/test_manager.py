@@ -164,8 +164,14 @@ class TestBaseDocumentManager(unittest.TestCase):
         corpus_metadata = {"source": "test", "author": "tester"}
         optional_props = BaseDocumentOptionalProps(title="Test Document", collection="test_collection")
 
+        # Mock document instances that will be returned by from_props
+        mock_docs = [MagicMock() for _ in range(3)]
+        
         # Mock the document creation
         with patch.object(MockDocument, "from_props") as mock_from_props:
+            # Configure mock to return our mock documents
+            mock_from_props.side_effect = mock_docs
+            
             # Call the method under test
             result = self.manager.insert_documents(
                 corpus_id, document_contents, document_embeddings, corpus_metadata, optional_props
@@ -174,6 +180,10 @@ class TestBaseDocumentManager(unittest.TestCase):
             # Assertions
             self.assertEqual(result, 3)  # Should return the number of documents inserted
             self.assertEqual(mock_from_props.call_count, 3)
+            
+            # Verify session operations
+            self.session.add_all.assert_called_once_with(mock_docs)
+            self.session.commit.assert_called_once()
 
             # Verify the calls to from_props with correct arguments
             calls = mock_from_props.call_args_list
@@ -210,19 +220,26 @@ class TestBaseDocumentManager(unittest.TestCase):
         document_contents = ["Short doc", "Longer document content"]
         document_embeddings = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
         corpus_metadata = {"source": "test"}
+        
+        # Mock document instances
+        mock_docs = [MagicMock(), MagicMock()]
 
         # Mock the _extract_chunk_metadata method
         with patch.object(self.manager, "_extract_chunk_metadata") as mock_extract:
             mock_extract.side_effect = lambda content: {"chunk_length": len(content)}
 
             # Call the method under test
-            with patch.object(MockDocument, "from_props"):
+            with patch.object(MockDocument, "from_props", side_effect=mock_docs):
                 self.manager.insert_documents(corpus_id, document_contents, document_embeddings, corpus_metadata)
 
             # Verify _extract_chunk_metadata was called for each document
             self.assertEqual(mock_extract.call_count, 2)
             mock_extract.assert_any_call("Short doc")
             mock_extract.assert_any_call("Longer document content")
+            
+            # Verify session operations
+            self.session.add_all.assert_called_once_with(mock_docs)
+            self.session.commit.assert_called_once()
 
     def test_insert_corpus(self):
         """Test insert_corpus method"""
@@ -297,6 +314,10 @@ class TestBaseDocumentManager(unittest.TestCase):
         
         # Assertions
         self.assertEqual(result, 0)  # Should return 0 for empty lists
+        
+        # Verify that session operations are not called for empty lists
+        self.session.add_all.assert_not_called()
+        self.session.commit.assert_not_called()
     
     def test_insert_corpus_embedding_error(self):
         """Test insert_corpus when embedding fails"""
