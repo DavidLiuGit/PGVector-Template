@@ -151,7 +151,8 @@ class BaseCorpusManager(ABC):
         """
         if self.__class__ is not BaseCorpusManager:
             logger.warning("Using default _split_corpus. Override this method to improve performance.")
-        return [content[i : i + 1000] for i in range(0, len(content), 1000)]
+        split_content = [content[i : i + 1000] for i in range(0, len(content), 1000)]
+        return [c for c in split_content if len(c.strip()) > 0]
 
     def _extract_chunk_metadata(self, content: str) -> dict[str, Any]:
         """

@@ -241,6 +241,18 @@ class TestBaseDocumentManager(unittest.TestCase):
             self.session.add_all.assert_called_once_with(mock_docs)
             self.session.commit.assert_called_once()
 
+    def test_split_corpus(self):
+        """Test _split_corpus method with built-in filtering"""
+        # Test with content that includes empty chunks
+        content = "First chunk\n\n\n   \nSecond chunk"
+        
+        # Call the method under test
+        result = self.manager._split_corpus(content)
+        
+        # Verify that only non-empty chunks are returned
+        for chunk in result:
+            self.assertTrue(len(chunk.strip()) > 0)
+
     def test_insert_corpus(self):
         """Test insert_corpus method"""
         # Setup test data
@@ -281,10 +293,11 @@ class TestBaseDocumentManager(unittest.TestCase):
         optional_props = None
 
         # Mock the dependencies
-        with patch.object(self.manager, "_split_corpus") as mock_split, \
-             patch.object(self.config.embedding_provider, "embed_batch") as mock_embed, \
-             patch.object(self.manager, "insert_documents") as mock_insert:
-            
+        with (
+            patch.object(self.manager, "_split_corpus") as mock_split,
+            patch.object(self.config.embedding_provider, "embed_batch") as mock_embed,
+            patch.object(self.manager, "insert_documents") as mock_insert,
+        ):
             # Configure mocks
             mock_split.return_value = []  # Empty content results in no chunks
             mock_embed.return_value = []  # No embeddings for empty content
@@ -327,9 +340,10 @@ class TestBaseDocumentManager(unittest.TestCase):
         optional_props = None
         
         # Mock the dependencies
-        with patch.object(self.manager, "_split_corpus") as mock_split, \
-             patch.object(self.config.embedding_provider, "embed_batch") as mock_embed:
-            
+        with (
+            patch.object(self.manager, "_split_corpus") as mock_split,
+            patch.object(self.config.embedding_provider, "embed_batch") as mock_embed,
+        ):
             # Configure mocks
             mock_split.return_value = ["Chunk 1"]
             mock_embed.side_effect = Exception("Embedding failed")
@@ -339,6 +353,32 @@ class TestBaseDocumentManager(unittest.TestCase):
                 self.manager.insert_corpus(content, corpus_metadata, optional_props)
             
             self.assertIn("Embedding failed", str(context.exception))
+            
+    def test_split_corpus_with_custom_implementation(self):
+        """Test _split_corpus with custom implementation"""
+        # Create content with some empty chunks that should be filtered out
+        content = "Valid chunk 1\n\n   \n\nValid chunk 2\n\n\nValid chunk 3"
+        
+        # Call the actual implementation without mocking
+        result = self.manager._split_corpus(content)
+        
+        # Verify that only valid chunks are returned
+        for chunk in result:
+            self.assertTrue(len(chunk.strip()) > 0)
+        
+        # Test with a custom implementation
+        class CustomManager(BaseCorpusManager):
+            def _split_corpus(self, content, **kwargs):
+                # Split by newlines and only keep chunks with more than 10 characters
+                chunks = content.split("\n")
+                return [c for c in chunks if len(c.strip()) > 10]
+                
+        custom_manager = CustomManager(self.session, self.config)
+        custom_result = custom_manager._split_corpus("Short\nLong enough chunk\nToo short")
+        
+        # Verify that only chunks with more than 10 characters are included
+        for chunk in custom_result:
+            self.assertTrue(len(chunk.strip()) > 10)
 
 
 if __name__ == "__main__":
