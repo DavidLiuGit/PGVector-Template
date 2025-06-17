@@ -23,6 +23,17 @@ class TestBaseDocumentMetadata(unittest.TestCase):
         self.assertIsInstance(result, dict)
         self.assertEqual(result["document_type"], "test_type")
         self.assertEqual(result["schema_version"], "2.0")
+        
+    def test_validation(self):
+        """Test validation of BaseDocumentMetadata"""
+        # Test with valid values
+        metadata = BaseDocumentMetadata(document_type="test_type")
+        self.assertEqual(metadata.document_type, "test_type")
+        self.assertEqual(metadata.schema_version, "1.0")
+        
+        # Test with missing required field
+        with self.assertRaises(Exception):
+            BaseDocumentMetadata()
 
 
 class TestBaseDocument(unittest.TestCase):

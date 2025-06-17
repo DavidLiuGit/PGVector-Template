@@ -2,10 +2,9 @@
 Integration tests for the BaseCorpusManager class
 """
 
-import uuid
 import numpy as np
 from textwrap import dedent
-from typing import Any, List, Type
+from typing import Any, Type
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import Column
@@ -46,7 +45,7 @@ class SimpleEmbeddingProvider(BaseEmbeddingProvider):
 class TestDocumentMetadata(BaseDocumentMetadata):
     """Test document metadata"""
 
-    document_type: str = "test_document"
+    document_type: str = "paragraphs"
     schema_version: str = "1.0"
 
 
@@ -79,7 +78,7 @@ class TestCorpusManagerConfig(BaseCorpusManagerConfig):
     schema_name: str = "test_schema"
     document_cls: Type[BaseDocument] = TestDocument
     embedding_provider: BaseEmbeddingProvider = SimpleEmbeddingProvider()
-    document_metadata: BaseDocumentMetadata = TestDocumentMetadata("paragraphs")
+    document_metadata: BaseDocumentMetadata = TestDocumentMetadata()
 
 
 class TestCorpusManagerIntegration:

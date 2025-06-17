@@ -1,4 +1,4 @@
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, ClassVar, Type, TypeVar, Annotated
 from uuid import uuid4, UUID
@@ -148,15 +148,14 @@ class BaseDocument(Base):
     # Index("ix_metadata_gin", "metadata", postgresql_using="gin")
 
 
-@dataclass
-class BaseDocumentMetadata:
+class BaseDocumentMetadata(BaseModel):
     """Base metadata structure"""
 
-    document_type: str
-    schema_version: str = "1.0"
+    document_type: str = Field(..., description="Description for type of document, e.g. markdown, pdf, etc")
+    schema_version: str = Field("1.0", description="Schema version for the metadata")
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return self.model_dump()
 
 
 @dataclass
