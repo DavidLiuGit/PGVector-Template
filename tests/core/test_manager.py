@@ -32,14 +32,18 @@ class MockDocumentMetadata(BaseDocumentMetadata):
 
     document_type: str = "mock"
 
+    author: str = "mock author"
+    source: str
+    chunk_length: int
+
 
 class MockConfig(BaseCorpusManagerConfig):
     """Mock configuration for testing"""
 
     schema_name: str = "test_schema"
     document_cls: Type[BaseDocument] = MockDocument
-    embedding_provider: Type[BaseEmbeddingProvider] = MockEmbeddingProvider
-    document_metadata: BaseDocumentMetadata = MockDocumentMetadata(document_type="mock")
+    embedding_provider: BaseEmbeddingProvider = MockEmbeddingProvider
+    document_metadata: Type[BaseDocumentMetadata] = MockDocumentMetadata
 
 
 class ConcreteDocumentManager(BaseCorpusManager):
@@ -166,12 +170,12 @@ class TestBaseDocumentManager(unittest.TestCase):
 
         # Mock document instances that will be returned by from_props
         mock_docs = [MagicMock() for _ in range(3)]
-        
+
         # Mock the document creation
         with patch.object(MockDocument, "from_props") as mock_from_props:
             # Configure mock to return our mock documents
             mock_from_props.side_effect = mock_docs
-            
+
             # Call the method under test
             result = self.manager.insert_documents(
                 corpus_id, document_contents, document_embeddings, corpus_metadata, optional_props
@@ -180,7 +184,7 @@ class TestBaseDocumentManager(unittest.TestCase):
             # Assertions
             self.assertEqual(result, 3)  # Should return the number of documents inserted
             self.assertEqual(mock_from_props.call_count, 3)
-            
+
             # Verify session operations
             self.session.add_all.assert_called_once_with(mock_docs)
             self.session.commit.assert_called_once()
@@ -220,7 +224,7 @@ class TestBaseDocumentManager(unittest.TestCase):
         document_contents = ["Short doc", "Longer document content"]
         document_embeddings = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
         corpus_metadata = {"source": "test"}
-        
+
         # Mock document instances
         mock_docs = [MagicMock(), MagicMock()]
 
@@ -236,7 +240,7 @@ class TestBaseDocumentManager(unittest.TestCase):
             self.assertEqual(mock_extract.call_count, 2)
             mock_extract.assert_any_call("Short doc")
             mock_extract.assert_any_call("Longer document content")
-            
+
             # Verify session operations
             self.session.add_all.assert_called_once_with(mock_docs)
             self.session.commit.assert_called_once()
@@ -245,10 +249,10 @@ class TestBaseDocumentManager(unittest.TestCase):
         """Test _split_corpus method with built-in filtering"""
         # Test with content that includes empty chunks
         content = "First chunk\n\n\n   \nSecond chunk"
-        
+
         # Call the method under test
         result = self.manager._split_corpus(content)
-        
+
         # Verify that only non-empty chunks are returned
         for chunk in result:
             self.assertTrue(len(chunk.strip()) > 0)
@@ -284,7 +288,6 @@ class TestBaseDocumentManager(unittest.TestCase):
                 "test-uuid", ["Chunk 1", "Chunk 2"], [[0.1, 0.2], [0.3, 0.4]], corpus_metadata, optional_props
             )
 
-
     def test_insert_corpus_empty_content(self):
         """Test insert_corpus with empty content"""
         # Setup test data
@@ -311,7 +314,7 @@ class TestBaseDocumentManager(unittest.TestCase):
             mock_split.assert_called_once_with(content)
             mock_embed.assert_called_once_with([])
             mock_insert.assert_called_once()
-    
+
     def test_insert_documents_empty_list(self):
         """Test insert_documents with empty lists"""
         # Setup test data
@@ -319,26 +322,24 @@ class TestBaseDocumentManager(unittest.TestCase):
         document_contents = []
         document_embeddings = []
         corpus_metadata = {"source": "test"}
-        
+
         # Call the method under test
-        result = self.manager.insert_documents(
-            corpus_id, document_contents, document_embeddings, corpus_metadata
-        )
-        
+        result = self.manager.insert_documents(corpus_id, document_contents, document_embeddings, corpus_metadata)
+
         # Assertions
         self.assertEqual(result, 0)  # Should return 0 for empty lists
-        
+
         # Verify that session operations are not called for empty lists
         self.session.add_all.assert_not_called()
         self.session.commit.assert_not_called()
-    
+
     def test_insert_corpus_embedding_error(self):
         """Test insert_corpus when embedding fails"""
         # Setup test data
         content = "Test content"
         corpus_metadata = {"source": "test"}
         optional_props = None
-        
+
         # Mock the dependencies
         with (
             patch.object(self.manager, "_split_corpus") as mock_split,
@@ -347,35 +348,35 @@ class TestBaseDocumentManager(unittest.TestCase):
             # Configure mocks
             mock_split.return_value = ["Chunk 1"]
             mock_embed.side_effect = Exception("Embedding failed")
-            
+
             # Verify that the exception is propagated
             with self.assertRaises(Exception) as context:
                 self.manager.insert_corpus(content, corpus_metadata, optional_props)
-            
+
             self.assertIn("Embedding failed", str(context.exception))
-            
+
     def test_split_corpus_with_custom_implementation(self):
         """Test _split_corpus with custom implementation"""
         # Create content with some empty chunks that should be filtered out
         content = "Valid chunk 1\n\n   \n\nValid chunk 2\n\n\nValid chunk 3"
-        
+
         # Call the actual implementation without mocking
         result = self.manager._split_corpus(content)
-        
+
         # Verify that only valid chunks are returned
         for chunk in result:
             self.assertTrue(len(chunk.strip()) > 0)
-        
+
         # Test with a custom implementation
         class CustomManager(BaseCorpusManager):
             def _split_corpus(self, content, **kwargs):
                 # Split by newlines and only keep chunks with more than 10 characters
                 chunks = content.split("\n")
                 return [c for c in chunks if len(c.strip()) > 10]
-                
+
         custom_manager = CustomManager(self.session, self.config)
         custom_result = custom_manager._split_corpus("Short\nLong enough chunk\nToo short")
-        
+
         # Verify that only chunks with more than 10 characters are included
         for chunk in custom_result:
             self.assertTrue(len(chunk.strip()) > 10)

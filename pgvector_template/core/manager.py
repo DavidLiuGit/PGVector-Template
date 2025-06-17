@@ -19,7 +19,7 @@ class BaseCorpusManagerConfig(BaseModel):
     schema_name: str
     document_cls: Type[BaseDocument]
     embedding_provider: BaseEmbeddingProvider
-    document_metadata: BaseDocumentMetadata
+    document_metadata: Type[BaseDocumentMetadata]
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -80,7 +80,7 @@ class BaseCorpusManager(ABC):
         self,
         content: str,
         corpus_metadata: dict[str, Any],
-        optional_props: Type[BaseDocumentOptionalProps],
+        optional_props: BaseDocumentOptionalProps,
     ) -> int:
         """
         Insert a new `Corpus`, which will be split into 1-or-more `Document`s, depending on its length.
@@ -130,13 +130,14 @@ class BaseCorpusManager(ABC):
         documents_to_insert = []
         for i in range(len(document_contents)):
             chunk_md = self._extract_chunk_metadata(document_contents[i])
+            base_metadata = self.config.document_metadata(**(corpus_metadata | chunk_md))
             documents_to_insert.append(
                 self.config.document_cls.from_props(
                     corpus_id=corpus_id,
                     chunk_index=i,
                     content=document_contents[i],
                     embedding=document_embeddings[i],
-                    metadata=corpus_metadata | chunk_md,
+                    metadata=base_metadata.model_dump(),
                     optional_props=optional_props,
                 )
             )

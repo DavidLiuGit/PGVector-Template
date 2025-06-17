@@ -45,8 +45,15 @@ class SimpleEmbeddingProvider(BaseEmbeddingProvider):
 class TestDocumentMetadata(BaseDocumentMetadata):
     """Test document metadata"""
 
+    # corpus
     document_type: str = "paragraphs"
     schema_version: str = "1.0"
+    source: str
+    author: str
+
+    # document chunks
+    chunk_length: int
+    word_count: int
 
 
 class ParagraphCorpusManager(BaseCorpusManager):
@@ -68,7 +75,6 @@ class ParagraphCorpusManager(BaseCorpusManager):
         return {
             "chunk_length": len(content),
             "word_count": len(content.split()),
-            "first_words": " ".join(content.split()[:5]) + "..." if len(content.split()) > 5 else content,
         }
 
 
@@ -78,7 +84,7 @@ class TestCorpusManagerConfig(BaseCorpusManagerConfig):
     schema_name: str = "test_schema"
     document_cls: Type[BaseDocument] = TestDocument
     embedding_provider: BaseEmbeddingProvider = SimpleEmbeddingProvider()
-    document_metadata: BaseDocumentMetadata = TestDocumentMetadata()
+    document_metadata: Type[BaseDocumentMetadata] = TestDocumentMetadata
 
 
 class TestCorpusManagerIntegration:
@@ -159,7 +165,6 @@ class TestCorpusManagerIntegration:
                     # Custom metadata from _extract_chunk_metadata
                     assert "chunk_length" in doc.document_metadata
                     assert "word_count" in doc.document_metadata
-                    assert "first_words" in doc.document_metadata
 
                 # Check optional properties
                 for doc in docs:
