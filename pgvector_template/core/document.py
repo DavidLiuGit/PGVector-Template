@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any, ClassVar, Type, TypeVar, Annotated
 from uuid import uuid4, UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import (
     Column,
     String,
@@ -27,16 +27,27 @@ class BaseDocumentOptionalProps(BaseModel):
 
     title: str | None = None
     """Optional title or summary for the document"""
-    collection: str | None = None
+    collection: str | None = Field(None, max_length=64)
     """Collection name for grouping documents of the same type"""
-    original_url: str | None = None
+    original_url: str | None = Field(None, max_length=2048)
     """Optional source URL for the document"""
-    language: str | None = "en"
+    language: str | None = Field("en", pattern=r"^[a-z]{2}(-[A-Z]{2})?$")
     """Language of the content (ISO 639-1 code), e.g., 'en', 'es', 'zh'"""
-    score: float | None = None
+    score: float | None = Field(None, ge=0.0, le=1.0)
     """Optional score assigned during ingestion (e.g., relevance, confidence)"""
     tags: list[str] | None = None
     """List of tags or keywords for filtering, categorization, or faceted search"""
+
+    @field_validator("tags")
+    @classmethod
+    def validate_tags(cls, v):
+        if v is not None:
+            # Ensure all tags are strings and not empty
+            if not all(isinstance(tag, str) and tag.strip() for tag in v):
+                raise ValueError("All tags must be non-empty strings")
+            # Remove duplicates while preserving order
+            return list(dict.fromkeys(v))
+        return v
 
 
 T = TypeVar("T", bound="BaseDocument")
