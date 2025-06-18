@@ -19,7 +19,7 @@ class BaseCorpusManagerConfig(BaseModel):
     schema_name: str
     document_cls: Type[BaseDocument]
     embedding_provider: BaseEmbeddingProvider
-    document_metadata: Type[BaseDocumentMetadata]
+    document_metadata_cls: Type[BaseDocumentMetadata]
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -130,7 +130,7 @@ class BaseCorpusManager(ABC):
         documents_to_insert = []
         for i in range(len(document_contents)):
             chunk_md = self._extract_chunk_metadata(document_contents[i])
-            base_metadata = self.config.document_metadata(**(corpus_metadata | chunk_md))
+            base_metadata = self.config.document_metadata_cls(**(corpus_metadata | chunk_md))
             documents_to_insert.append(
                 self.config.document_cls.from_props(
                     corpus_id=corpus_id,

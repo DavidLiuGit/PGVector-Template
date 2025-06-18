@@ -84,7 +84,7 @@ class TestCorpusManagerConfig(BaseCorpusManagerConfig):
     schema_name: str = "test_schema"
     document_cls: Type[BaseDocument] = TestDocument
     embedding_provider: BaseEmbeddingProvider = SimpleEmbeddingProvider()
-    document_metadata: Type[BaseDocumentMetadata] = TestDocumentMetadata
+    document_metadata_cls: Type[BaseDocumentMetadata] = TestDocumentMetadata
 
 
 class TestCorpusManagerIntegration:

@@ -43,7 +43,7 @@ class MockConfig(BaseCorpusManagerConfig):
     schema_name: str = "test_schema"
     document_cls: Type[BaseDocument] = MockDocument
     embedding_provider: BaseEmbeddingProvider = MockEmbeddingProvider
-    document_metadata: Type[BaseDocumentMetadata] = MockDocumentMetadata
+    document_metadata_cls: Type[BaseDocumentMetadata] = MockDocumentMetadata
 
 
 class ConcreteDocumentManager(BaseCorpusManager):
