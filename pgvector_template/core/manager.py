@@ -80,7 +80,7 @@ class BaseCorpusManager(ABC):
         self,
         content: str,
         corpus_metadata: dict[str, Any],
-        optional_props: BaseDocumentOptionalProps,
+        optional_props: BaseDocumentOptionalProps | None = None,
     ) -> int:
         """
         Insert a new `Corpus`, which will be split into 1-or-more `Document`s, depending on its length.
