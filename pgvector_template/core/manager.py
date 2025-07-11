@@ -81,6 +81,7 @@ class BaseCorpusManager(ABC):
         content: str,
         corpus_metadata: dict[str, Any],
         optional_props: BaseDocumentOptionalProps | None = None,
+        corpus_id: UUID | str | None = None,
     ) -> int:
         """
         Insert a new `Corpus`, which will be split into 1-or-more `Document`s, depending on its length.
@@ -94,14 +95,15 @@ class BaseCorpusManager(ABC):
         Returns:
             int: The number of **documents** inserted for the provided corpus
         """
-        corpus_id = uuid4()
+        if not corpus_id:
+            corpus_id = uuid4()
         document_contents = self._split_corpus(content)
         document_embeddings = self.config.embedding_provider.embed_batch(document_contents)
         return self.insert_documents(corpus_id, document_contents, document_embeddings, corpus_metadata, optional_props)
 
     def insert_documents(
         self,
-        corpus_id: UUID,
+        corpus_id: UUID | str,
         document_contents: list[str],
         document_embeddings: list[list[float]],
         corpus_metadata: dict[str, Any],

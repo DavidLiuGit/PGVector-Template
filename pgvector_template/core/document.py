@@ -106,7 +106,7 @@ class BaseDocument(Base):
     @classmethod
     def from_props(
         cls: Type[T],
-        corpus_id: UUID,
+        corpus_id: UUID | str,
         chunk_index: int,
         content: str,
         embedding: list[float],
@@ -117,7 +117,7 @@ class BaseDocument(Base):
         Create a BaseDocument instance from mandatory and optional properties.
 
         Args:
-            corpus_id: UUID of the corpus this document belongs to
+            corpus_id: UUID or string (max 64 chars) of the corpus this document belongs to
             chunk_index: Index of this chunk within the corpus
             content: Text content of the document
             embedding: Vector embedding of the content
@@ -129,6 +129,7 @@ class BaseDocument(Base):
         if optional_props is None:
             optional_props = BaseDocumentOptionalProps()
 
+        # SQLAlchemy handles string-to-UUID conversion automatically with as_uuid=True
         return cls(
             corpus_id=corpus_id,
             chunk_index=chunk_index,
