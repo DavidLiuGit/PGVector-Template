@@ -66,7 +66,7 @@ class TestBaseDocumentManager(unittest.TestCase):
     def test_init(self):
         """Test initialization of BaseDocumentManager"""
         self.assertEqual(self.manager.session, self.session)
-        self.assertEqual(self.manager.schema_name, self.config.schema_name)
+        self.assertEqual(self.manager.config, self.config)
 
     def test_get_full_corpus_no_chunks(self):
         """Test get_full_corpus when no chunks are found"""
@@ -87,58 +87,22 @@ class TestBaseDocumentManager(unittest.TestCase):
         mock_query.order_by.assert_called_once()
         mock_query.all.assert_called_once()
 
-    def test_get_full_corpus_with_full_doc(self):
-        """Test get_full_corpus when a full document (chunk_index=0) exists"""
-        # Setup mock documents
-        corpus_id = str(uuid4())
-        full_doc = MagicMock()
-        full_doc.original_id = corpus_id
-        full_doc.chunk_index = 0
-        full_doc.content = "Full document content"
-        full_doc.document_metadata = {"key": "value"}
-        full_doc.id = str(uuid4())
-        full_doc.title = "Full Document"
-
-        chunk1 = MagicMock()
-        chunk1.chunk_index = 1
-        chunk1.id = str(uuid4())
-        chunk1.title = "Chunk 1"
-
-        # Setup mock query that returns our test documents
-        mock_query = MagicMock()
-        self.session.query.return_value = mock_query
-        mock_query.filter.return_value = mock_query
-        mock_query.order_by.return_value = mock_query
-        mock_query.all.return_value = [full_doc, chunk1]
-
-        # Call the method under test
-        result = self.manager.get_full_corpus(corpus_id)
-
-        # Assertions
-        self.assertIsNotNone(result)
-        self.assertEqual(result["id"], full_doc.original_id)
-        self.assertEqual(result["content"], full_doc.content)
-        self.assertEqual(result["metadata"], full_doc.document_metadata)
-        self.assertEqual(len(result["chunks"]), 1)
-        self.assertEqual(result["chunks"][0]["id"], chunk1.id)
-        self.assertEqual(result["chunks"][0]["index"], chunk1.chunk_index)
-
     def test_get_full_corpus_reconstruct_from_chunks(self):
         """Test get_full_corpus when reconstructing from chunks"""
         # Setup mock documents (no chunk_index=0)
         corpus_id = str(uuid4())
 
         chunk1 = MagicMock()
-        chunk1.chunk_index = 1
-        chunk1.content = "Chunk 1 content"
+        chunk1.chunk_index = 0
+        chunk1.content = "Chunk 1 content\n"
         chunk1.document_metadata = {"key": "value"}
         chunk1.id = str(uuid4())
         chunk1.title = "Chunk 1"
 
         chunk2 = MagicMock()
-        chunk2.chunk_index = 2
+        chunk2.chunk_index = 1
         chunk2.content = "Chunk 2 content"
-        chunk2.document_metadata = {"key": "value"}
+        chunk2.document_metadata = {"key": "value1"}
         chunk2.id = str(uuid4())
         chunk2.title = "Chunk 2"
 
@@ -153,11 +117,106 @@ class TestBaseDocumentManager(unittest.TestCase):
         result = self.manager.get_full_corpus(corpus_id)
 
         # Assertions
+        assert result  # for typing
         self.assertIsNotNone(result)
-        self.assertEqual(result["id"], corpus_id)
-        self.assertEqual(result["content"], "Chunk 1 content\nChunk 2 content")
-        self.assertEqual(result["metadata"], chunk1.document_metadata)
-        self.assertEqual(len(result["chunks"]), 2)
+        self.assertEqual(result.corpus_id, corpus_id)
+        self.assertEqual(result.content, "Chunk 1 content\nChunk 2 content")
+        self.assertEqual(result.metadata, chunk2.document_metadata)
+        self.assertEqual(len(result.documents), 2)
+
+    def test_get_full_corpus_no_chunks(self):
+        """Test get_full_corpus when no chunks are found"""
+        mock_query = MagicMock()
+        self.session.query.return_value = mock_query
+        mock_query.filter.return_value = mock_query
+        mock_query.order_by.return_value = mock_query
+        mock_query.all.return_value = []
+
+        result = self.manager.get_full_corpus("test-corpus-id")
+        self.assertIsNone(result)
+
+    def test_get_full_corpus_with_chunks(self):
+        """Test get_full_corpus with chunks found"""
+        corpus_id = "test-corpus-id"
+
+        chunk1 = MagicMock(spec=BaseDocument)
+        chunk1.chunk_index = 0
+        chunk1.content = "First chunk"
+        chunk1.document_metadata = {"key": "value1"}
+
+        chunk2 = MagicMock(spec=BaseDocument)
+        chunk2.chunk_index = 1
+        chunk2.content = "Second chunk"
+        chunk2.document_metadata = {"key": "value2"}
+
+        chunks = [chunk1, chunk2]
+
+        mock_query = MagicMock()
+        self.session.query.return_value = mock_query
+        mock_query.filter.return_value = mock_query
+        mock_query.order_by.return_value = mock_query
+        mock_query.all.return_value = chunks
+
+        with patch.object(self.manager, "_join_documents") as mock_join:
+            mock_join.return_value = ("First chunkSecond chunk", {"key": "value2"})
+
+            result = self.manager.get_full_corpus(corpus_id)
+
+            self.assertIsNotNone(result)
+            assert result  # for typing
+            self.assertEqual(result.corpus_id, corpus_id)
+            self.assertEqual(result.content, "First chunkSecond chunk")
+            self.assertEqual(result.metadata, {"key": "value2"})
+            self.assertEqual(result.documents, chunks)
+            mock_join.assert_called_once_with(chunks)
+
+    def test_get_full_corpus_calls_join_documents(self):
+        """Test get_full_corpus delegates to _join_documents"""
+        corpus_id = "test-corpus-id"
+        chunks = [MagicMock(spec=BaseDocument)]
+
+        mock_query = MagicMock()
+        self.session.query.return_value = mock_query
+        mock_query.filter.return_value = mock_query
+        mock_query.order_by.return_value = mock_query
+        mock_query.all.return_value = chunks
+
+        with patch.object(self.manager, "_join_documents") as mock_join:
+            mock_join.return_value = ("content", {"meta": "data"})
+
+            result = self.manager.get_full_corpus(corpus_id)
+
+            mock_join.assert_called_once_with(chunks)
+            assert result  # for typing
+            self.assertEqual(result.content, "content")
+            self.assertEqual(result.metadata, {"meta": "data"})
+
+    def test_get_full_corpus_database_error(self):
+        """Test get_full_corpus when database query fails"""
+        self.session.query.side_effect = Exception("Database connection failed")
+
+        with self.assertRaises(Exception) as context:
+            self.manager.get_full_corpus("test-corpus-id")
+
+        self.assertIn("Database connection failed", str(context.exception))
+
+    def test_get_full_corpus_join_documents_error(self):
+        """Test get_full_corpus when _join_documents raises exception"""
+        chunks = [MagicMock(spec=BaseDocument)]
+
+        mock_query = MagicMock()
+        self.session.query.return_value = mock_query
+        mock_query.filter.return_value = mock_query
+        mock_query.order_by.return_value = mock_query
+        mock_query.all.return_value = chunks
+
+        with patch.object(self.manager, "_join_documents") as mock_join:
+            mock_join.side_effect = TypeError("document_metadata is None")
+
+            with self.assertRaises(TypeError) as context:
+                self.manager.get_full_corpus("test-corpus-id")
+
+            self.assertIn("document_metadata is None", str(context.exception))
 
     def test_insert_documents_success(self):
         """Test successful insertion of documents"""
@@ -380,6 +439,149 @@ class TestBaseDocumentManager(unittest.TestCase):
         # Verify that only chunks with more than 10 characters are included
         for chunk in custom_result:
             self.assertTrue(len(chunk.strip()) > 10)
+
+    def test_infer_corpus_metadata_empty_list(self):
+        """Test _infer_corpus_metadata with empty document list"""
+        result = self.manager._infer_corpus_metadata([])
+        self.assertEqual(result, {})
+
+    def test_infer_corpus_metadata_single_document(self):
+        """Test _infer_corpus_metadata with single document"""
+        doc = MagicMock(spec=BaseDocument)
+        doc.document_metadata = {"key1": "value1", "key2": "value2"}
+
+        result = self.manager._infer_corpus_metadata([doc])
+        self.assertEqual(result, {"key1": "value1", "key2": "value2"})
+
+    def test_infer_corpus_metadata_multiple_documents_no_overlap(self):
+        """Test _infer_corpus_metadata with multiple documents without key conflicts"""
+        doc1 = MagicMock(spec=BaseDocument)
+        doc1.document_metadata = {"key1": "value1"}
+        doc2 = MagicMock(spec=BaseDocument)
+        doc2.document_metadata = {"key2": "value2"}
+
+        result = self.manager._infer_corpus_metadata([doc1, doc2])
+        self.assertEqual(result, {"key1": "value1", "key2": "value2"})
+
+    def test_infer_corpus_metadata_multiple_documents_with_overlap(self):
+        """Test _infer_corpus_metadata with multiple documents with key conflicts"""
+        doc1 = MagicMock(spec=BaseDocument)
+        doc1.document_metadata = {"key1": "value1", "shared": "first"}
+        doc2 = MagicMock(spec=BaseDocument)
+        doc2.document_metadata = {"key2": "value2", "shared": "second"}
+
+        result = self.manager._infer_corpus_metadata([doc1, doc2])
+        self.assertEqual(result, {"key1": "value1", "key2": "value2", "shared": "second"})
+
+    def test_infer_corpus_metadata_empty_metadata(self):
+        """Test _infer_corpus_metadata with documents having empty metadata"""
+        doc1 = MagicMock(spec=BaseDocument)
+        doc1.document_metadata = {}
+        doc2 = MagicMock(spec=BaseDocument)
+        doc2.document_metadata = {"key1": "value1"}
+
+        result = self.manager._infer_corpus_metadata([doc1, doc2])
+        self.assertEqual(result, {"key1": "value1"})
+
+    def test_infer_corpus_metadata_none_raises_error(self):
+        """Test _infer_corpus_metadata raises error when document_metadata is None"""
+        doc = MagicMock(spec=BaseDocument)
+        doc.document_metadata = None
+
+        with self.assertRaises(TypeError):
+            self.manager._infer_corpus_metadata([doc])
+
+    def test_infer_corpus_metadata_mixed_none_and_valid(self):
+        """Test _infer_corpus_metadata with mix of None and valid metadata"""
+        doc1 = MagicMock(spec=BaseDocument)
+        doc1.document_metadata = {"key1": "value1"}
+        doc2 = MagicMock(spec=BaseDocument)
+        doc2.document_metadata = None
+
+        with self.assertRaises(TypeError):
+            self.manager._infer_corpus_metadata([doc1, doc2])
+
+    def test_infer_corpus_metadata_nested_dict_values(self):
+        """Test _infer_corpus_metadata with nested dictionary values"""
+        doc1 = MagicMock(spec=BaseDocument)
+        doc1.document_metadata = {"nested": {"key1": "value1"}, "simple": "value"}
+        doc2 = MagicMock(spec=BaseDocument)
+        doc2.document_metadata = {"nested": {"key2": "value2"}, "other": "data"}
+
+        result = self.manager._infer_corpus_metadata([doc1, doc2])
+        # Later document's nested dict overwrites the first
+        self.assertEqual(result["nested"], {"key2": "value2"})
+        self.assertEqual(result["simple"], "value")
+        self.assertEqual(result["other"], "data")
+
+    def test_join_documents_empty_list(self):
+        """Test _join_documents with empty document list"""
+        content, metadata = self.manager._join_documents([])
+        self.assertEqual(content, "")
+        self.assertEqual(metadata, {})
+
+    def test_join_documents_single_document(self):
+        """Test _join_documents with single document"""
+        doc = MagicMock(spec=BaseDocument)
+        doc.chunk_index = 0
+        doc.content = "Single document content"
+        doc.document_metadata = {"key": "value"}
+
+        content, metadata = self.manager._join_documents([doc])
+        self.assertEqual(content, "Single document content")
+        self.assertEqual(metadata, {"key": "value"})
+
+    def test_join_documents_multiple_ordered(self):
+        """Test _join_documents with multiple documents in order"""
+        doc1 = MagicMock(spec=BaseDocument)
+        doc1.chunk_index = 0
+        doc1.content = "First chunk"
+        doc1.document_metadata = {"chunk": "first"}
+
+        doc2 = MagicMock(spec=BaseDocument)
+        doc2.chunk_index = 1
+        doc2.content = "Second chunk"
+        doc2.document_metadata = {"chunk": "second"}
+
+        content, metadata = self.manager._join_documents([doc1, doc2])
+        self.assertEqual(content, "First chunkSecond chunk")
+        self.assertEqual(metadata, {"chunk": "second"})
+
+    def test_join_documents_multiple_unordered(self):
+        """Test _join_documents with documents in wrong order (should be sorted)"""
+        doc1 = MagicMock(spec=BaseDocument)
+        doc1.chunk_index = 2
+        doc1.content = "Third chunk"
+        doc1.document_metadata = {"order": "third"}
+
+        doc2 = MagicMock(spec=BaseDocument)
+        doc2.chunk_index = 0
+        doc2.content = "First chunk"
+        doc2.document_metadata = {"order": "first"}
+
+        doc3 = MagicMock(spec=BaseDocument)
+        doc3.chunk_index = 1
+        doc3.content = "Second chunk"
+        doc3.document_metadata = {"order": "second"}
+
+        content, metadata = self.manager._join_documents([doc1, doc2, doc3])
+        self.assertEqual(content, "First chunkSecond chunkThird chunk")
+        self.assertEqual(metadata, {"order": "third"})
+
+    def test_join_documents_calls_infer_corpus_metadata(self):
+        """Test _join_documents calls _infer_corpus_metadata"""
+        doc = MagicMock(spec=BaseDocument)
+        doc.chunk_index = 0
+        doc.content = "Test content"
+        doc.document_metadata = {"key": "value"}
+
+        with patch.object(self.manager, "_infer_corpus_metadata") as mock_infer:
+            mock_infer.return_value = {"inferred": "metadata"}
+
+            content, metadata = self.manager._join_documents([doc])
+
+            mock_infer.assert_called_once_with([doc])
+            self.assertEqual(metadata, {"inferred": "metadata"})
 
 
 if __name__ == "__main__":

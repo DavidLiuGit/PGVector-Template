@@ -63,10 +63,14 @@ class ParagraphCorpusManager(BaseCorpusManager):
     This demonstrates how to customize the document splitting behavior.
     """
 
+    @property
+    def corpus_delimiter(cls):
+        return "\n\n"
+
     def _split_corpus(self, content: str, **kwargs) -> list[str]:
         """Split content on paragraph breaks (double newlines)"""
         # Skip empty paragraphs and strip whitespace
-        paragraphs = [p.strip() for p in content.split("\n\n") if p.strip()]
+        paragraphs = [p.strip() for p in content.split(self.corpus_delimiter) if p.strip()]
         return paragraphs
 
     def _extract_chunk_metadata(self, content: str) -> dict[str, Any]:
@@ -77,14 +81,21 @@ class ParagraphCorpusManager(BaseCorpusManager):
             "word_count": len(content.split()),
         }
 
+    def _join_documents(self, documents: list[BaseDocument]) -> tuple[str, dict[str, Any]]:
+        documents.sort(key=lambda d: d.chunk_index)  # type: ignore
+        corpus_content = self.corpus_delimiter.join(d.content for d in documents)  # type: ignore
+        return corpus_content, self._infer_corpus_metadata(documents)
+
+    def _infer_corpus_metadata(self, documents: list[BaseDocument]) -> dict[str, Any]:
+        return super()._infer_corpus_metadata(documents)
+
 
 class TestCorpusManagerConfig(BaseCorpusManagerConfig):
     """Configuration for test corpus manager"""
 
-    schema_name: str = "test_schema"
     document_cls: Type[BaseDocument] = TestDocument
-    embedding_provider: BaseEmbeddingProvider = SimpleEmbeddingProvider()
-    document_metadata_cls: Type[BaseDocumentMetadata] = TestDocumentMetadata
+    embedding_provider: BaseEmbeddingProvider | None = SimpleEmbeddingProvider()
+    document_metadata_cls: Type[BaseDocumentMetadata] | None = TestDocumentMetadata
 
 
 class TestCorpusManagerIntegration:
@@ -102,7 +113,7 @@ class TestCorpusManagerIntegration:
             # Create a session
             with db_manager.get_session() as session:
                 # Create corpus manager config and manager
-                config = TestCorpusManagerConfig(schema_name=temp_schema)
+                config = TestCorpusManagerConfig()
                 manager = ParagraphCorpusManager(session, config)
 
                 # Sample multi-paragraph text
@@ -126,7 +137,7 @@ class TestCorpusManagerIntegration:
                     title="Test Document with Paragraphs",
                     collection="test_collection",
                     tags=["test", "paragraphs", "corpus"],
-                )
+                )  # type: ignore
 
                 # Insert the corpus
                 num_docs = manager.insert_corpus(sample_text, metadata, optional_props)
@@ -144,13 +155,10 @@ class TestCorpusManagerIntegration:
 
                 # Check that documents have the correct content
                 contents = [doc.content.strip() for doc in docs]
-                # expected_contents = [
-                #     "This is the first paragraph of the test document. It contains multiple sentences that should be kept together.",
-                #     "This is the second paragraph with different content. We want to make sure this is split properly.",
-                #     "Finally, this is the third paragraph. It should be treated as a separate chunk.",
-                # ]
                 expected_contents = [
                     "This is the first paragraph of the test document",
+                    "This is the second paragraph with different content",
+                    "Finally, this is the third paragraph",
                 ]
 
                 for expected in expected_contents:
@@ -159,8 +167,8 @@ class TestCorpusManagerIntegration:
                 # Check that metadata was properly combined
                 for doc in docs:
                     # Base metadata
-                    assert doc.document_metadata["source"] == "integration_test"
-                    assert doc.document_metadata["author"] == "test_user"
+                    assert doc.document_metadata["source"] == "integration_test"  # type: ignore
+                    assert doc.document_metadata["author"] == "test_user"  # type: ignore
 
                     # Custom metadata from _extract_chunk_metadata
                     assert "chunk_length" in doc.document_metadata
@@ -168,21 +176,74 @@ class TestCorpusManagerIntegration:
 
                 # Check optional properties
                 for doc in docs:
-                    assert doc.title == "Test Document with Paragraphs"
-                    assert doc.collection == "test_collection"
-                    assert doc.tags == ["test", "paragraphs", "corpus"]
+                    assert doc.title == "Test Document with Paragraphs"  # type: ignore
+                    assert doc.collection == "test_collection"  # type: ignore
+                    assert doc.tags == ["test", "paragraphs", "corpus"]  # type: ignore
 
-                # TODO: Test retrieving the full corpus
-                # corpus_id = str(list(corpus_ids)[0])
-                # full_corpus = manager.get_full_corpus(corpus_id)
+                # Test retrieving the full corpus
+                corpus_id = str(list(corpus_ids)[0])
+                full_corpus = manager.get_full_corpus(corpus_id)
 
-                # assert full_corpus is not None
-                # assert full_corpus["id"] == corpus_id
-                # assert len(full_corpus["chunks"]) == 3
+                assert full_corpus is not None
+                assert full_corpus.corpus_id == corpus_id
+                assert len(full_corpus.documents) == 3
 
-                # # The content should be joined with newlines
-                # expected_combined = "\n".join(expected_contents)
-                # assert full_corpus["content"] == expected_combined
+                # The content should be joined without delimiters (as per _join_documents)
+                expected_combined = "\n\n".join(
+                    [
+                        "This is the first paragraph of the test document.\nIt contains multiple sentences that should be kept together.",
+                        "This is the second paragraph with different content.\nWe want to make sure this is split properly.",
+                        "Finally, this is the third paragraph.\nIt should be treated as a separate chunk.",
+                    ]
+                )
+                assert full_corpus.content == expected_combined
+
+                # Check that metadata was inferred correctly (last document's metadata wins)
+                assert "source" in full_corpus.metadata
+                assert "author" in full_corpus.metadata
+
+        finally:
+            # Clean up temp schema
+            db_manager.cleanup(temp_schema)
+
+    def test_read_only_corpus_manager(self, database_url: str):
+        """Test using corpus manager for read-only operations without embedding provider"""
+        # Create a temporary document database manager and schema
+        db_manager = TempDocumentDatabaseManager(
+            database_url=database_url, schema_suffix="corpus_read_test", document_classes=[TestDocument]
+        )
+        temp_schema = db_manager.setup()
+
+        try:
+            # First, insert some test data using full config
+            with db_manager.get_session() as session:
+                full_config = TestCorpusManagerConfig()
+                full_manager = ParagraphCorpusManager(session, full_config)
+
+                sample_text = "First paragraph.\n\nSecond paragraph."
+                metadata = {"source": "test", "author": "user"}
+                corpus_id = full_manager.insert_corpus(sample_text, metadata)
+                session.commit()
+
+                # Now test read-only operations with minimal config
+                read_config = BaseCorpusManagerConfig(document_cls=TestDocument)  # type: ignore
+                read_manager = ParagraphCorpusManager(session, read_config)
+
+                # Should be able to read corpus
+                docs = session.query(TestDocument).all()
+                corpus = read_manager.get_full_corpus(str(docs[0].corpus_id))
+
+                assert corpus is not None
+                assert len(corpus.documents) == 2
+                assert "First paragraph." in corpus.content
+                assert "Second paragraph." in corpus.content
+
+                # Should fail on insert operations
+                try:
+                    read_manager.insert_corpus("test", {})
+                    assert False, "Should have raised ValueError"
+                except ValueError as e:
+                    assert "embedding_provider must be provided" in str(e)
 
         finally:
             # Clean up temp schema

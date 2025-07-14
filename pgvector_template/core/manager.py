@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from logging import getLogger
-from typing import Any, Optional, Type
+from typing import Any, Type
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from pgvector_template.core.document import BaseDocument, BaseDocumentMetadata, BaseDocumentOptionalProps
@@ -16,12 +17,30 @@ logger = getLogger(__name__)
 class BaseCorpusManagerConfig(BaseModel):
     """Base configuration for `Corpus` & `Document` management operations"""
 
-    schema_name: str
-    document_cls: Type[BaseDocument]
-    embedding_provider: BaseEmbeddingProvider
-    document_metadata_cls: Type[BaseDocumentMetadata]
+    document_cls: Type[BaseDocument] = Field(..., description="Document class, must be subclass of BaseDocument")
+    embedding_provider: BaseEmbeddingProvider | None = Field(
+        None, description="Embedding provider for insert operations"
+    )
+    document_metadata_cls: Type[BaseDocumentMetadata] | None = Field(
+        None, description="Document metadata class, must be subclass of BaseDocumentMetadata"
+    )
 
     model_config = {"arbitrary_types_allowed": True}
+
+
+@dataclass
+class Corpus:
+    """
+    Serves as the return type for `BaseCorpusManager.get_full_corpus()`.
+
+    Logical grouping of one or more documents (chunks) belonging to the same original source (corpus).
+    Typically all documents in a corpus share the same `corpus_id` and are ordered by `chunk_index`.
+    """
+
+    corpus_id: UUID | str
+    content: str
+    metadata: dict[str, Any]  # e.g. source, tags, etc.
+    documents: list[BaseDocument]
 
 
 class BaseCorpusManager(ABC):
@@ -43,38 +62,26 @@ class BaseCorpusManager(ABC):
     ) -> None:
         self.session = session
         self._cfg = config
-        self.schema_name = config.schema_name
 
-    def get_full_corpus(self, corpus_id: str, chunk_delimiter: str = "\n") -> Optional[dict[str, Any]]:
+    def get_full_corpus(self, corpus_id: str) -> Corpus | None:
         """Reconstruct full corpus from its individual documents/chunks"""
         chunks = (
-            self.session.query(BaseDocument)
-            .filter(BaseDocument.corpus_id == corpus_id, BaseDocument.is_deleted == False)
-            .order_by(BaseDocument.chunk_index)
+            self.session.query(self.config.document_cls)
+            .filter(self.config.document_cls.corpus_id == corpus_id, self.config.document_cls.is_deleted == False)
+            .order_by(self.config.document_cls.chunk_index)
             .all()
         )
 
         if not chunks:
             return None
 
-        # Full document is chunk_index = 0, or reconstruct from chunks
-        full_doc = next((c for c in chunks if c.chunk_index == 0), None)
-        if full_doc:
-            return {
-                "id": full_doc.original_id,
-                "content": full_doc.content,
-                "metadata": full_doc.document_metadata,
-                "chunks": [{"id": c.id, "index": c.chunk_index, "title": c.title} for c in chunks if c.chunk_index > 0],
-            }
-
-        # Reconstruct from chunks
-        reconstructed_content = chunk_delimiter.join([c.content for c in chunks])
-        return {
-            "id": corpus_id,
-            "content": reconstructed_content,
-            "metadata": chunks[0].document_metadata,  # Use first chunk's metadata
-            "chunks": [{"id": c.id, "index": c.chunk_index, "title": c.title} for c in chunks],
-        }
+        content, metadata = self._join_documents(chunks)
+        return Corpus(
+            corpus_id=corpus_id,
+            content=content,
+            metadata=metadata,
+            documents=chunks,
+        )
 
     def insert_corpus(
         self,
@@ -95,6 +102,8 @@ class BaseCorpusManager(ABC):
         Returns:
             int: The number of **documents** inserted for the provided corpus
         """
+        self._check_insert_dependencies()
+
         if not corpus_id:
             corpus_id = uuid4()
         document_contents = self._split_corpus(content)
@@ -125,6 +134,8 @@ class BaseCorpusManager(ABC):
         Raises:
             ValueError: If the length of document_contents doesn't match document_embeddings
         """
+        self._check_insert_dependencies()
+
         if len(document_contents) != len(document_embeddings):
             raise ValueError("Number of embeddings does not match number of documents")
         if len(document_contents) == 0:
@@ -150,20 +161,59 @@ class BaseCorpusManager(ABC):
     def _split_corpus(self, content: str, **kwargs) -> list[str]:
         """
         **It is highly recommended to override this method.**
-        Split a corpus into chunks.
+        Split a corpus' string content into smaller chunks.
         """
         if self.__class__ is not BaseCorpusManager:
             logger.warning("Using default _split_corpus. Override this method to improve performance.")
         split_content = [content[i : i + 1000] for i in range(0, len(content), 1000)]
         return [c for c in split_content if len(c.strip()) > 0]
 
+    def _join_documents(self, documents: list[BaseDocument]) -> tuple[str, dict[str, Any]]:
+        """
+        **It is highly recommended to override this method.**
+        **This method should effectively reverse the `_split_corpus` method.**
+        Join a list of documents back into a single corpus string.
+        Return an instance of corpus metadata. This is a best effort, since not all properties in
+        `BaseDocumentMetadata`/`document_metadata_cls` are relevant to the corpus.
+        """
+        if self.__class__ is not BaseCorpusManager:
+            logger.warning("Using default _join_documents. Override this method to improve functionality.")
+        documents.sort(key=lambda d: d.chunk_index)  # type: ignore
+        # since _split_corpus performs a simple split on every 1000 chars, we can simply call `join`
+        corpus_content = "".join(d.content for d in documents)  # type: ignore
+        corpus_metadata = self._infer_corpus_metadata(documents)
+        return corpus_content, corpus_metadata
+
     def _extract_chunk_metadata(self, content: str) -> dict[str, Any]:
         """
         **It is highly recommended to override this method.**
-        Extract metadata from a chunk of content, to be appended to corpus metadata
+        Extract metadata from a chunk of content, to be appended to corpus metadata.
+        Note: returning a key-value pair here does NOT guarantee its inclusion when it's added to the database.
         """
         if self.__class__ is not BaseCorpusManager:
             logger.warning("Using default _extract_chunk_metadata. It is highly recommended to override this method.")
+        # this is simply an example. Since the document metadata that gets saved
         return {
             "chunk_length": len(content),
         }
+
+    def _infer_corpus_metadata(self, documents: list[BaseDocument]) -> dict[str, Any]:
+        """
+        **It is highly recommended to override this method.**
+        **This method should be a best-effort reversal of `extract_chunk_metadata()`**
+        Infer metadata for the corpus from the constituent `BaseDocument`s.
+        """
+        if self.__class__ is not BaseCorpusManager:
+            logger.warning("Using default _infer_corpus_metadata. It is highly recommended to override this method.")
+        # merge all document.document_metadata together, and return
+        merged = {}
+        for d in documents:
+            merged.update(d.document_metadata)  # type: ignore
+        return merged
+
+    def _check_insert_dependencies(self) -> None:
+        """Check that required dependencies for insert operations are available"""
+        if not self.config.embedding_provider:
+            raise ValueError("embedding_provider must be provided in config for insert operations")
+        if not self.config.document_metadata_cls:
+            raise ValueError("document_metadata_cls must be provided in config for insert operations")

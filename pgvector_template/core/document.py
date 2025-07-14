@@ -1,7 +1,6 @@
-from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, ClassVar, Type, TypeVar, Annotated
-from uuid import uuid4, UUID
+from typing import Any, Type, TypeVar
+from uuid import uuid4, UUID as UuidLiteral
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import (
@@ -13,7 +12,6 @@ from sqlalchemy import (
     Integer,
     Float,
     Index,
-    text,
 )
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.dialects.postgresql import UUID, JSONB
@@ -106,7 +104,7 @@ class BaseDocument(Base):
     @classmethod
     def from_props(
         cls: Type[T],
-        corpus_id: UUID | str,
+        corpus_id: UuidLiteral | str,
         chunk_index: int,
         content: str,
         embedding: list[float],
@@ -127,7 +125,7 @@ class BaseDocument(Base):
             A new BaseDocument instance of the calling class type
         """
         if optional_props is None:
-            optional_props = BaseDocumentOptionalProps()
+            optional_props = BaseDocumentOptionalProps()  # type: ignore
 
         # SQLAlchemy handles string-to-UUID conversion automatically with as_uuid=True
         return cls(
@@ -150,23 +148,14 @@ class BaseDocument(Base):
 
 
 class BaseDocumentMetadata(BaseModel):
-    """Base metadata structure"""
+    """
+    Base metadata structure.
+    It is generally expected that every `BaseDocument`'s metadata follows this exact schema,
+    without any extraneous properties, or any missing properties, to avoid ambiguity.
+    """
 
     document_type: str = Field(..., description="Description for type of document, e.g. markdown, pdf, etc")
     schema_version: str = Field("1.0", description="Schema version for the metadata")
 
     def to_dict(self) -> dict[str, Any]:
         return self.model_dump()
-
-
-@dataclass
-class Corpus:
-    """
-    Logical grouping of one or more documents (chunks) belonging to the same original source.
-
-    Typically all documents in a corpus share the same `corpus_id` and are ordered by `chunk_index`.
-    """
-
-    corpus_id: UUID
-    documents: list[BaseDocument]
-    metadata: dict[str, Any]  # e.g. source, tags, etc.
