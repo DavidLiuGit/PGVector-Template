@@ -137,7 +137,7 @@ class TestCorpusManagerIntegration:
                     title="Test Document with Paragraphs",
                     collection="test_collection",
                     tags=["test", "paragraphs", "corpus"],
-                )  # type: ignore
+                )
 
                 # Insert the corpus
                 num_docs = manager.insert_corpus(sample_text, metadata, optional_props)
@@ -226,7 +226,7 @@ class TestCorpusManagerIntegration:
                 session.commit()
 
                 # Now test read-only operations with minimal config
-                read_config = BaseCorpusManagerConfig(document_cls=TestDocument)  # type: ignore
+                read_config = BaseCorpusManagerConfig(document_cls=TestDocument)
                 read_manager = ParagraphCorpusManager(session, read_config)
 
                 # Should be able to read corpus

@@ -19,10 +19,10 @@ class BaseCorpusManagerConfig(BaseModel):
 
     document_cls: Type[BaseDocument] = Field(..., description="Document class, must be subclass of BaseDocument")
     embedding_provider: BaseEmbeddingProvider | None = Field(
-        None, description="Embedding provider for insert operations"
+        default=None, description="Embedding provider for insert operations"
     )
     document_metadata_cls: Type[BaseDocumentMetadata] | None = Field(
-        None, description="Document metadata class, must be subclass of BaseDocumentMetadata"
+        default=None, description="Document metadata class, must be subclass of BaseDocumentMetadata"
     )
 
     model_config = {"arbitrary_types_allowed": True}

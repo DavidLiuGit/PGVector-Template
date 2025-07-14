@@ -25,13 +25,13 @@ class BaseDocumentOptionalProps(BaseModel):
 
     title: str | None = None
     """Optional title or summary for the document"""
-    collection: str | None = Field(None, max_length=64)
+    collection: str | None = Field(default=None, max_length=64)
     """Collection name for grouping documents of the same type"""
-    original_url: str | None = Field(None, max_length=2048)
+    original_url: str | None = Field(default=None, max_length=2048)
     """Optional source URL for the document"""
-    language: str | None = Field("en", pattern=r"^[a-z]{2}(-[A-Z]{2})?$")
+    language: str | None = Field(default="en", pattern=r"^[a-z]{2}(-[A-Z]{2})?$")
     """Language of the content (ISO 639-1 code), e.g., 'en', 'es', 'zh'"""
-    score: float | None = Field(None, ge=0.0, le=1.0)
+    score: float | None = Field(default=None, ge=0.0, le=1.0)
     """Optional score assigned during ingestion (e.g., relevance, confidence)"""
     tags: list[str] | None = None
     """List of tags or keywords for filtering, categorization, or faceted search"""
@@ -125,7 +125,7 @@ class BaseDocument(Base):
             A new BaseDocument instance of the calling class type
         """
         if optional_props is None:
-            optional_props = BaseDocumentOptionalProps()  # type: ignore
+            optional_props = BaseDocumentOptionalProps()
 
         # SQLAlchemy handles string-to-UUID conversion automatically with as_uuid=True
         return cls(
@@ -155,7 +155,7 @@ class BaseDocumentMetadata(BaseModel):
     """
 
     document_type: str = Field(..., description="Description for type of document, e.g. markdown, pdf, etc")
-    schema_version: str = Field("1.0", description="Schema version for the metadata")
+    schema_version: str = Field(default="1.0", description="Schema version for the metadata")
 
     def to_dict(self) -> dict[str, Any]:
         return self.model_dump()
