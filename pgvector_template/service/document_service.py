@@ -32,6 +32,11 @@ class DocumentServiceConfig(BaseModel):
     """Document metadata schema. Must be child of `BaseDocumentMetadata`."""
     corpus_manager_cfg: BaseCorpusManagerConfig = Field(default=BaseCorpusManagerConfig(document_cls=BaseDocument))
     """Instance of `BaseCorpusManagerConfig` or a child. Used to instantiate a CorpusManager."""
+    
+    def model_post_init(self, _):
+        # coerce document_cls onto corpus_manager_cfg.document_cls, iff corpus_manager_cfg is an instance of BaseCorpusManagerConfig (and not a subclass)
+        if type(self.corpus_manager_cfg) is BaseCorpusManagerConfig:
+            self.corpus_manager_cfg.document_cls = self.document_cls
 
     # search_client_cls
     # search_client_cfg
