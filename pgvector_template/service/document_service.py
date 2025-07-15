@@ -45,6 +45,15 @@ class DocumentService(Generic[T]):
     @property
     def config(self) -> DocumentServiceConfig:
         return self._cfg
+    
+    @property
+    def corpus_manager(self) -> BaseCorpusManager:
+        """CorpusManager instance"""
+        return self._corpus_manager
+    
+    @property
+    def search_client(self):
+        raise NotImplementedError("Search client not yet implemented")
 
     def __init__(self, session: Session, config: DocumentServiceConfig):
         self.session = session
@@ -53,12 +62,12 @@ class DocumentService(Generic[T]):
 
     def _setup(self):
         """Initialize CorpusManager and SearchClient"""
-        self.corpus_manager = self._setup_corpus_manager()
+        self._corpus_manager = self._create_corpus_manager()
         self.search = self._setup_search()
 
-    def _setup_corpus_manager(self):
+    def _create_corpus_manager(self) -> BaseCorpusManager:
         """Initialize CorpusManager. Override this to provide custom instantiation logic."""
-        self.corpus_manager = self.config.corpus_manager_cls(self.session, self.config.corpus_manager_cfg)
+        return self.config.corpus_manager_cls(self.session, self.config.corpus_manager_cfg)
 
     def _setup_search(self):
         """Initialize search client - to be implemented. Override this to provide custom instantiation logic."""
