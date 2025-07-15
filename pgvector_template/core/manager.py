@@ -17,13 +17,12 @@ logger = getLogger(__name__)
 class BaseCorpusManagerConfig(BaseModel):
     """Base configuration for `Corpus` & `Document` management operations"""
 
-    document_cls: Type[BaseDocument] = Field(..., description="Document class, must be subclass of BaseDocument")
-    embedding_provider: BaseEmbeddingProvider | None = Field(
-        default=None, description="Embedding provider for insert operations"
-    )
-    document_metadata_cls: Type[BaseDocumentMetadata] | None = Field(
-        default=None, description="Document metadata class, must be subclass of BaseDocumentMetadata"
-    )
+    document_cls: Type[BaseDocument] = Field(...)
+    """Document class **type** (not an instance). Must be subclass of `BaseDocument`."""
+    embedding_provider: BaseEmbeddingProvider | None = Field(default=None)
+    """Instance of `BaseEmbeddingProvider` child class. Acts as embedding provider for insert operations."""
+    document_metadata_cls: Type[BaseDocumentMetadata] | None = Field(default=None)
+    """Document metadata class **type** (not an instance). Must be subclass of BaseDocumentMetadata."""
 
     model_config = {"arbitrary_types_allowed": True}
 
