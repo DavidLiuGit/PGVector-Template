@@ -54,6 +54,20 @@ class BaseCorpusManager(ABC):
     def config(self) -> BaseCorpusManagerConfig:
         return self._cfg
 
+    @property
+    def document_metadata_class(self) -> Type[BaseDocumentMetadata]:
+        """Returns the document metadata class, raising an error if it's not set."""
+        if self.config.document_metadata_cls is None:
+            raise ValueError("document_metadata_cls must be provided in config for this operation")
+        return self.config.document_metadata_cls
+
+    @property
+    def embedding_provider(self) -> BaseEmbeddingProvider:
+        """Returns the embedding provider, raising an error if it's not set."""
+        if self.config.embedding_provider is None:
+            raise ValueError("embedding_provider must be provided in config for this operation")
+        return self.config.embedding_provider
+
     def __init__(
         self,
         session: Session,
@@ -62,7 +76,7 @@ class BaseCorpusManager(ABC):
         self.session = session
         self._cfg = config
 
-    def get_full_corpus(self, corpus_id: str) -> Corpus | None:
+    def get_full_corpus(self, corpus_id: str, **kwargs) -> Corpus | None:
         """Reconstruct full corpus from its individual documents/chunks"""
         chunks = (
             self.session.query(self.config.document_cls)
@@ -88,6 +102,7 @@ class BaseCorpusManager(ABC):
         corpus_metadata: dict[str, Any],
         optional_props: BaseDocumentOptionalProps | None = None,
         corpus_id: UUID | str | None = None,
+        **kwargs,
     ) -> int:
         """
         Insert a new `Corpus`, which will be split into 1-or-more `Document`s, depending on its length.
@@ -101,12 +116,10 @@ class BaseCorpusManager(ABC):
         Returns:
             int: The number of **documents** inserted for the provided corpus
         """
-        self._check_insert_dependencies()
-
         if not corpus_id:
             corpus_id = uuid4()
         document_contents = self._split_corpus(content)
-        document_embeddings = self.config.embedding_provider.embed_batch(document_contents)
+        document_embeddings = self.embedding_provider.embed_batch(document_contents)
         return self.insert_documents(corpus_id, document_contents, document_embeddings, corpus_metadata, optional_props)
 
     def insert_documents(
@@ -116,6 +129,7 @@ class BaseCorpusManager(ABC):
         document_embeddings: list[list[float]],
         corpus_metadata: dict[str, Any],
         optional_props: BaseDocumentOptionalProps | None = None,
+        **kwargs,
     ) -> int:
         """
         Insert a list of documents (usually from a chunked + embedded corpus).
@@ -133,8 +147,6 @@ class BaseCorpusManager(ABC):
         Raises:
             ValueError: If the length of document_contents doesn't match document_embeddings
         """
-        self._check_insert_dependencies()
-
         if len(document_contents) != len(document_embeddings):
             raise ValueError("Number of embeddings does not match number of documents")
         if len(document_contents) == 0:
@@ -142,7 +154,7 @@ class BaseCorpusManager(ABC):
         documents_to_insert = []
         for i in range(len(document_contents)):
             chunk_md = self._extract_chunk_metadata(document_contents[i])
-            base_metadata = self.config.document_metadata_cls(**(corpus_metadata | chunk_md))
+            base_metadata = self.document_metadata_class(**(corpus_metadata | chunk_md))
             documents_to_insert.append(
                 self.config.document_cls.from_props(
                     corpus_id=corpus_id,
@@ -167,7 +179,7 @@ class BaseCorpusManager(ABC):
         split_content = [content[i : i + 1000] for i in range(0, len(content), 1000)]
         return [c for c in split_content if len(c.strip()) > 0]
 
-    def _join_documents(self, documents: list[BaseDocument]) -> tuple[str, dict[str, Any]]:
+    def _join_documents(self, documents: list[BaseDocument], **kwargs) -> tuple[str, dict[str, Any]]:
         """
         **It is highly recommended to override this method.**
         **This method should effectively reverse the `_split_corpus` method.**
@@ -183,7 +195,7 @@ class BaseCorpusManager(ABC):
         corpus_metadata = self._infer_corpus_metadata(documents)
         return corpus_content, corpus_metadata
 
-    def _extract_chunk_metadata(self, content: str) -> dict[str, Any]:
+    def _extract_chunk_metadata(self, content: str, **kwargs) -> dict[str, Any]:
         """
         **It is highly recommended to override this method.**
         Extract metadata from a chunk of content, to be appended to corpus metadata.
@@ -196,7 +208,7 @@ class BaseCorpusManager(ABC):
             "chunk_length": len(content),
         }
 
-    def _infer_corpus_metadata(self, documents: list[BaseDocument]) -> dict[str, Any]:
+    def _infer_corpus_metadata(self, documents: list[BaseDocument], **kwargs) -> dict[str, Any]:
         """
         **It is highly recommended to override this method.**
         **This method should be a best-effort reversal of `extract_chunk_metadata()`**
@@ -209,10 +221,3 @@ class BaseCorpusManager(ABC):
         for d in documents:
             merged.update(d.document_metadata)  # type: ignore
         return merged
-
-    def _check_insert_dependencies(self) -> None:
-        """Check that required dependencies for insert operations are available"""
-        if not self.config.embedding_provider:
-            raise ValueError("embedding_provider must be provided in config for insert operations")
-        if not self.config.document_metadata_cls:
-            raise ValueError("document_metadata_cls must be provided in config for insert operations")
