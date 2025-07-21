@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pgvector-template"
-version = "0.1.3"
+version = "0.2.0"
 description = "Template library for flexible PGVector RAG implementations"
 authors = [{ name="DL", email="v49t9zpqd@mozmail.com" }]
 license = { text = "MIT" }
