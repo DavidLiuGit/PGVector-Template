@@ -7,7 +7,11 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from pgvector_template.core.document import BaseDocument, BaseDocumentMetadata, BaseDocumentOptionalProps
+from pgvector_template.core.document import (
+    BaseDocument,
+    BaseDocumentMetadata,
+    BaseDocumentOptionalProps,
+)
 from pgvector_template.core.embedder import BaseEmbeddingProvider
 
 
@@ -21,7 +25,7 @@ class BaseCorpusManagerConfig(BaseModel):
     """Document class **type** (not an instance). Must be subclass of `BaseDocument`."""
     embedding_provider: BaseEmbeddingProvider | None = Field(default=None)
     """Instance of `BaseEmbeddingProvider` child class. Acts as embedding provider for insert operations."""
-    document_metadata_cls: Type[BaseDocumentMetadata] | None = Field(default=None)
+    document_metadata_cls: Type[BaseDocumentMetadata] = Field(default=BaseDocumentMetadata)
     """Document metadata class **type** (not an instance). Must be subclass of BaseDocumentMetadata."""
 
     model_config = {"arbitrary_types_allowed": True}
@@ -57,8 +61,6 @@ class BaseCorpusManager(ABC):
     @property
     def document_metadata_class(self) -> Type[BaseDocumentMetadata]:
         """Returns the document metadata class, raising an error if it's not set."""
-        if self.config.document_metadata_cls is None:
-            raise ValueError("document_metadata_cls must be provided in config for this operation")
         return self.config.document_metadata_cls
 
     @property
@@ -75,12 +77,19 @@ class BaseCorpusManager(ABC):
     ) -> None:
         self.session = session
         self._cfg = config
+        if not self.config.embedding_provider:
+            logger.warning(
+                "EmbeddingProvider not provided in config. Insertion will be unavailable."
+            )
 
     def get_full_corpus(self, corpus_id: str, **kwargs) -> Corpus | None:
         """Reconstruct full corpus from its individual documents/chunks"""
         chunks = (
             self.session.query(self.config.document_cls)
-            .filter(self.config.document_cls.corpus_id == corpus_id, self.config.document_cls.is_deleted == False)
+            .filter(
+                self.config.document_cls.corpus_id == corpus_id,
+                self.config.document_cls.is_deleted == False,
+            )
             .order_by(self.config.document_cls.chunk_index)
             .all()
         )
@@ -120,7 +129,9 @@ class BaseCorpusManager(ABC):
             corpus_id = uuid4()
         document_contents = self._split_corpus(content)
         document_embeddings = self.embedding_provider.embed_batch(document_contents)
-        return self.insert_documents(corpus_id, document_contents, document_embeddings, corpus_metadata, optional_props)
+        return self.insert_documents(
+            corpus_id, document_contents, document_embeddings, corpus_metadata, optional_props
+        )
 
     def insert_documents(
         self,
@@ -175,11 +186,15 @@ class BaseCorpusManager(ABC):
         Split a corpus' string content into smaller chunks.
         """
         if self.__class__ is not BaseCorpusManager:
-            logger.warning("Using default _split_corpus. Override this method to improve performance.")
+            logger.warning(
+                "Using default _split_corpus. Override this method to improve performance."
+            )
         split_content = [content[i : i + 1000] for i in range(0, len(content), 1000)]
         return [c for c in split_content if len(c.strip()) > 0]
 
-    def _join_documents(self, documents: list[BaseDocument], **kwargs) -> tuple[str, dict[str, Any]]:
+    def _join_documents(
+        self, documents: list[BaseDocument], **kwargs
+    ) -> tuple[str, dict[str, Any]]:
         """
         **It is highly recommended to override this method.**
         **This method should effectively reverse the `_split_corpus` method.**
@@ -188,7 +203,9 @@ class BaseCorpusManager(ABC):
         `BaseDocumentMetadata`/`document_metadata_cls` are relevant to the corpus.
         """
         if self.__class__ is not BaseCorpusManager:
-            logger.warning("Using default _join_documents. Override this method to improve functionality.")
+            logger.warning(
+                "Using default _join_documents. Override this method to improve functionality."
+            )
         documents.sort(key=lambda d: d.chunk_index)  # type: ignore
         # since _split_corpus performs a simple split on every 1000 chars, we can simply call `join`
         corpus_content = "".join(d.content for d in documents)  # type: ignore
@@ -202,7 +219,9 @@ class BaseCorpusManager(ABC):
         Note: returning a key-value pair here does NOT guarantee its inclusion when it's added to the database.
         """
         if self.__class__ is not BaseCorpusManager:
-            logger.warning("Using default _extract_chunk_metadata. It is highly recommended to override this method.")
+            logger.warning(
+                "Using default _extract_chunk_metadata. It is highly recommended to override this method."
+            )
         # this is simply an example. Since the document metadata that gets saved
         return {
             "chunk_length": len(content),
@@ -215,7 +234,9 @@ class BaseCorpusManager(ABC):
         Infer metadata for the corpus from the constituent `BaseDocument`s.
         """
         if self.__class__ is not BaseCorpusManager:
-            logger.warning("Using default _infer_corpus_metadata. It is highly recommended to override this method.")
+            logger.warning(
+                "Using default _infer_corpus_metadata. It is highly recommended to override this method."
+            )
         # merge all document.document_metadata together, and return
         merged = {}
         for d in documents:

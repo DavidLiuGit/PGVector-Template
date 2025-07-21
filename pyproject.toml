@@ -29,6 +29,9 @@ test = [
     "pytest-cov>=4.0.0",
     "python-dotenv>=1.0.0",
 ]
+dev = [
+    "black>=23.0.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/DavidLiuGit/PGVector-Template"
@@ -40,5 +43,5 @@ include = ["pgvector_template*"]  # Include all packages starting with pgvector_
 
 
 [tool.black]
-line-length = 120
+line-length = 100
 target-version = ["py311", "py312", "py313"]

@@ -32,7 +32,7 @@ class TestBaseDocumentMetadata(unittest.TestCase):
         self.assertEqual(metadata.schema_version, "1.0")
         
         # Test with missing required field
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValueError):
             BaseDocumentMetadata()
 
 
