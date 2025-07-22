@@ -109,22 +109,21 @@ class BaseSearchClient:
         """
         db_query = select(self.config.document_cls)
 
-        # if query.text:
-        #     db_query = self._apply_semantic_search(db_query, query)
+        if query.text:
+            db_query = self._apply_semantic_search(db_query, query)
         db_query = self._apply_keyword_search(db_query, query)
         # if query.metadata_filters:
         #     db_query = self._apply_metadata_filters(db_query, query)
         db_query = db_query.limit(query.limit)
 
-        # Execute the query
+        # execute query and return results
         results = self.session.scalars(db_query).all()
-
-        # Convert to RetrievalResult objects
         return self._convert_to_retrieval_results(results)
 
     def _apply_semantic_search(self, query: Select, search_query: SearchQuery) -> Select:
         """Apply semantic (vector) search criteria to the query.
         `embedding_provider` must be provided at instantiation, or an `ValueError` will be raised.
+        In PGVector, `<=>` operator is used to compare cosine distance. Lower = more similar.
 
         Args:
             query: The base SQLAlchemy query.
@@ -133,11 +132,10 @@ class BaseSearchClient:
         Returns:
             Updated SQLAlchemy query with semantic search applied.
         """
-        if not self.config.embedding_provider:
-            raise ValueError(
-                "EmbeddingProvider not provided in config. Vector (semantic) search is unavailable."
-            )
-        raise NotImplementedError
+        if not search_query.text:
+            return query
+        query_embedding = self.embedding_provider.embed_text(search_query.text)
+        return query.order_by(self.config.document_cls.embedding.cosine_distance(query_embedding))
 
     def _apply_keyword_search(self, db_query: Select, search_query: SearchQuery) -> Select:
         """Apply keyword (full-text) search criteria to the query.

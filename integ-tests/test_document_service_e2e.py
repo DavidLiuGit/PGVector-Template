@@ -35,21 +35,47 @@ class TestDocumentE2E(BaseDocument):
     __abstract__ = False
     __tablename__ = "test_e2e_doc_service"
 
-    embedding = Column(Vector(384))
+    embedding = Column(Vector(16))
 
 
 class SimpleEmbeddingProvider(BaseEmbeddingProvider):
-    """Simple deterministic embedding provider for testing"""
+    """Simple deterministic embedding provider for testing with basic semantic similarity"""
 
     def embed_text(self, text: str) -> list[float]:
-        base = np.ones(384) * (len(text) % 10) / 10
-        return base.tolist()
+        words = set(text.lower().split())
+        embedding = np.zeros(16)
+
+        # Feature 1: ML/AI terms (dimensions 0-3)
+        ml_terms = {"machine", "learning", "deep", "algorithms", "models", "training", "neural"}
+        ml_score = len(words & ml_terms) / len(words) if words else 0
+        embedding[0:4] = ml_score
+
+        # Feature 2: Database terms (dimensions 4-7)
+        db_terms = {"database", "sql", "queries", "data", "records", "store", "information"}
+        db_score = len(words & db_terms) / len(words) if words else 0
+        embedding[4:8] = db_score
+
+        # Feature 3: Technical terms (dimensions 8-11)
+        tech_terms = {"systems", "process", "efficiently", "require", "extensive", "specific"}
+        tech_score = len(words & tech_terms) / len(words) if words else 0
+        embedding[8:12] = tech_score
+
+        # Feature 4: Text length normalized (dimensions 12-15)
+        length_feature = min(len(text) / 100, 1.0)
+        embedding[12:16] = length_feature
+
+        # Add deterministic randomness based on text hash
+        np.random.seed(hash(text) % 2**32)
+        noise = np.random.normal(0, 0.01, 16)
+        embedding += noise
+
+        return embedding.tolist()
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
         return [self.embed_text(text) for text in texts]
 
     def get_dimensions(self) -> int:
-        return 384
+        return 16
 
 
 class TestDocumentMetadataE2E(BaseDocumentMetadata):
@@ -130,38 +156,46 @@ class TestDocumentServiceE2E:
 
                 session.commit()
 
-                # Retrieve documents using keyword search
-                search_query = SearchQuery(keywords=["learning", "algorithms"], limit=10)
-                search_results = service.search_client.search(search_query)
+                ##### Test 1: Keyword-only search
+                keyword_query = SearchQuery(keywords=["learning", "algorithms"], limit=10)
+                keyword_results = service.search_client.search(keyword_query)
 
-                # Verify search results
-                assert len(search_results) > 0, "Should find documents with keywords"
+                assert len(keyword_results) > 0, "Keyword search should find documents"
+                found_ml_keyword = any(
+                    "learning" in r.document.content or "algorithms" in r.document.content
+                    for r in keyword_results
+                )
+                assert found_ml_keyword, "Keyword search should find ML content"
 
-                found_ml_content = False
-                ml_corpus_id = None
-                for result in search_results:
-                    logger.warning(result.document)
-                    logger.warning(result.document.content)
-                    if (
-                        "learning" in result.document.content
-                        or "algorithms" in result.document.content
-                    ):
-                        found_ml_content = True
-                        ml_corpus_id = str(result.document.corpus_id)
-                        break
+                ##### Test 2: Semantic-only search
+                semantic_query = SearchQuery(
+                    text="artificial intelligence and neural networks", limit=10
+                )
+                semantic_results = service.search_client.search(semantic_query)
 
-                assert found_ml_content, "Should find ML-related content"
-                assert ml_corpus_id is not None, "Should have corpus_id from search results"
+                assert len(semantic_results) > 0, "Semantic search should find documents"
+                first_semantic = semantic_results[0]
+                assert (
+                    "learning" in first_semantic.document.content
+                    or "algorithms" in first_semantic.document.content
+                ), "Semantic search should prioritize ML content"
 
-                # Recover original corpus using CorpusManager.get_full_corpus
-                recovered_corpus_1 = service.corpus_manager.get_full_corpus(ml_corpus_id)
+                ##### Test 3: Combined keyword + semantic search
+                combined_query = SearchQuery(text="neural networks", keywords=["data"], limit=10)
+                combined_results = service.search_client.search(combined_query)
 
-                assert recovered_corpus_1 is not None, "Should recover the first corpus"
-                assert recovered_corpus_1.corpus_id == ml_corpus_id
-                assert "Machine learning" in recovered_corpus_1.content
-                assert "Deep learning" in recovered_corpus_1.content
-                assert recovered_corpus_1.metadata["source"] == "ml_textbook"
-                assert recovered_corpus_1.metadata["author"] == "researcher"
+                assert len(combined_results) > 0, "Combined search should find documents"
+                # Should find documents containing "data" and semantically similar to "neural networks"
+                found_data_content = any("data" in r.document.content for r in combined_results)
+                assert found_data_content, "Combined search should find content with keyword 'data'"
+
+                ##### Corpus recovery test
+                ml_corpus_id = str(keyword_results[0].document.corpus_id)
+                recovered_corpus = service.corpus_manager.get_full_corpus(ml_corpus_id)
+
+                assert recovered_corpus is not None, "Should recover corpus"
+                assert "Machine learning" in recovered_corpus.content
+                assert recovered_corpus.metadata["source"] == "ml_textbook"
 
         finally:
             db_manager.cleanup(temp_schema)

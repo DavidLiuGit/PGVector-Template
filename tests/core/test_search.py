@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import Mock
-from sqlalchemy import select
+
+from sqlalchemy import select, Column
+from pgvector.sqlalchemy import Vector
 
 from pgvector_template.core.embedder import BaseEmbeddingProvider
 from pgvector_template.core.search import BaseSearchClient, BaseSearchClientConfig, SearchQuery
@@ -10,6 +12,8 @@ from pgvector_template.core import BaseDocument
 class TestDocument(BaseDocument):
     __abstract__ = False
     __tablename__ = "test_search_documents"
+
+    embedding = Column(Vector(3))
 
 
 class TestEmbeddingProvider(BaseEmbeddingProvider):
@@ -32,7 +36,7 @@ class TestBaseSearchClient(unittest.TestCase):
         self.mock_embedding_provider = TestEmbeddingProvider()
         self.config = BaseSearchClientConfig(document_cls=TestDocument)
         self.client = BaseSearchClient(self.mock_session, self.config)
-        
+
         # Config with embedding provider for tests that need it
         self.config_with_embedding = BaseSearchClientConfig(
             document_cls=TestDocument,
@@ -61,15 +65,24 @@ class TestBaseSearchClient(unittest.TestCase):
         result_query = self.client._apply_keyword_search(base_query, search_query)
         self.assertEqual(str(base_query), str(result_query))
 
-    def test_apply_semantic_search_no_embedding_provider(self):
-        """Test that _apply_semantic_search raises ValueError when embedding_provider is not provided"""
+    def test_apply_semantic_search_with_text(self):
+        """Test that semantic search applies cosine distance ordering when text is provided"""
         base_query = select(TestDocument)
         search_query = SearchQuery(text="test query", limit=10)
 
-        with self.assertRaises(ValueError) as context:
-            self.client._apply_semantic_search(base_query, search_query)
-        
-        self.assertIn("EmbeddingProvider not provided", str(context.exception))
+        result_query = self.client_with_embedding._apply_semantic_search(base_query, search_query)
+
+        query_str = str(result_query.compile(compile_kwargs={"literal_binds": True}))
+        self.assertIn("ORDER BY", query_str)
+        self.assertIn("<=>", query_str)  # cosine-distance operator in PGVector
+
+    def test_apply_semantic_search_no_text(self):
+        """Test that query is unchanged when no text is provided"""
+        base_query = select(TestDocument)
+        search_query = SearchQuery(keywords=["test"], limit=10)
+
+        result_query = self.client_with_embedding._apply_semantic_search(base_query, search_query)
+        self.assertEqual(str(base_query), str(result_query))
 
 
 if __name__ == "__main__":
