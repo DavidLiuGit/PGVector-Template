@@ -12,6 +12,7 @@ from sqlalchemy import (
     Integer,
     Float,
     Index,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.dialects.postgresql import UUID, JSONB
@@ -63,6 +64,7 @@ class BaseDocument(Base):
     """
 
     __abstract__ = True
+    __tablename__ = "base_document"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     """Primary key of the Document table. Represents unique ID of a Document"""
@@ -98,8 +100,38 @@ class BaseDocument(Base):
     # Audit fields
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    is_deleted = Column(Boolean, default=False)
+    is_deleted = Column(Boolean, default=False, index=True)
     """Entries can be logically marked for deletion before they are permanently deleted."""
+
+    def __init_subclass__(cls, **kwargs):
+        """Simply declare `__table_args__` to add more args in child classes."""
+        super().__init_subclass__(**kwargs)
+
+        if hasattr(cls, "__tablename__"):
+            table_name = cls.__tablename__
+
+            base_table_args = (
+                Index(
+                    f"{table_name}_metadata_gin_idx", "document_metadata", postgresql_using="gin"
+                ),
+                cls.get_embedding_index(table_name),
+                Index(f"{table_name}_tags_gin_idx", "tags", postgresql_using="gin"),
+                Index(f"{table_name}_collection_corpus_idx", "collection", "corpus_id"),
+                UniqueConstraint(
+                    "collection",
+                    "corpus_id",
+                    "chunk_index",
+                    name=f"{table_name}_collection_corpus_chunk_unique",
+                ),
+            )
+
+            subclass_args = getattr(cls, "__table_args__", ())
+            if isinstance(subclass_args, dict):
+                cls.__table_args__ = base_table_args + (subclass_args,)
+            else:
+                if not isinstance(subclass_args, tuple):
+                    subclass_args = (subclass_args,) if subclass_args else ()
+                cls.__table_args__ = base_table_args + subclass_args
 
     @classmethod
     def from_props(
@@ -142,9 +174,15 @@ class BaseDocument(Base):
             tags=optional_props.tags,
         )
 
-    # Index("ix_corpus_chunk", "corpus_id", "chunk_index")
-    # Index("ix_content_trgm", text("content gin_trgm_ops"), postgresql_using="gin")  # For fuzzy text search
-    # Index("ix_metadata_gin", "metadata", postgresql_using="gin")
+    @classmethod
+    def get_embedding_index(cls, table_name: str) -> Index:
+        """Override this method to customize the embedding index."""
+        return Index(
+            f"{table_name}_embedding_hnsw_idx",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        )
 
 
 class BaseDocumentMetadata(BaseModel):
@@ -154,7 +192,9 @@ class BaseDocumentMetadata(BaseModel):
     without any extraneous properties, or any missing properties, to avoid ambiguity.
     """
 
-    document_type: str = Field(..., description="Description for type of document, e.g. markdown, pdf, etc")
+    document_type: str = Field(
+        ..., description="Description for type of document, e.g. markdown, pdf, etc"
+    )
     schema_version: str = Field(default="1.0", description="Schema version for the metadata")
 
     def to_dict(self) -> dict[str, Any]:
