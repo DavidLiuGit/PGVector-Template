@@ -95,6 +95,21 @@ class TestDocumentService(unittest.TestCase):
         self.assertEqual(service.search_client.config.document_cls, TestDocument)
         self.assertIsNone(service.search_client.config.embedding_provider)
 
+    def test_init_with_embedding_provider(self):
+        """Test initialization with embedding provider"""
+        # Create config with embedding provider
+        config = DocumentServiceConfig(
+            document_cls=TestDocument,
+            embedding_provider=self.embedding_provider,
+        )
+
+        # Initialize service
+        service = DocumentService(self.session, config)
+
+        # Verify embedding provider was assigned to both configs
+        self.assertEqual(service.corpus_manager.config.embedding_provider, self.embedding_provider)
+        self.assertEqual(service.search_client.config.embedding_provider, self.embedding_provider)
+
     def test_init_with_full_config(self):
         """Test initialization with full config"""
         # Create corpus manager config
@@ -130,10 +145,40 @@ class TestDocumentService(unittest.TestCase):
         self.assertIsInstance(service.search_client, TestSearchClient)
         self.assertEqual(service.corpus_manager.config, corpus_config)
         self.assertEqual(service.search_client.config, search_config)
+        # Configs already have embedding providers, so they should remain unchanged
         self.assertEqual(service.corpus_manager.config.embedding_provider, self.embedding_provider)
         self.assertEqual(service.search_client.config.embedding_provider, self.embedding_provider)
         self.assertEqual(service.corpus_manager.config.document_metadata_cls, TestDocumentMetadata)
         self.assertEqual(service.search_client.config.document_metadata_cls, TestDocumentMetadata)
+
+    def test_embedding_provider_not_overridden(self):
+        """Test that existing embedding providers in configs are not overridden"""
+        different_provider = TestEmbeddingProvider()
+        
+        # Create configs with their own embedding providers
+        corpus_config = BaseCorpusManagerConfig(
+            document_cls=TestDocument,
+            embedding_provider=different_provider,
+        )
+        search_config = BaseSearchClientConfig(
+            document_cls=TestDocument,
+            embedding_provider=different_provider,
+        )
+
+        # Create service config with different embedding provider
+        config = DocumentServiceConfig(
+            document_cls=TestDocument,
+            embedding_provider=self.embedding_provider,
+            corpus_manager_cfg=corpus_config,
+            search_client_cfg=search_config,
+        )
+
+        # Initialize service
+        service = DocumentService(self.session, config)
+
+        # Verify original embedding providers were preserved
+        self.assertEqual(service.corpus_manager.config.embedding_provider, different_provider)
+        self.assertEqual(service.search_client.config.embedding_provider, different_provider)
 
     # def test_custom_corpus_manager_creation(self):
     #     """Test custom corpus manager creation"""

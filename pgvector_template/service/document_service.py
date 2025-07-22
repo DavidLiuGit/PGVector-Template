@@ -53,6 +53,12 @@ class DocumentServiceConfig(BaseModel):
         if type(self.search_client_cfg) is BaseSearchClientConfig:
             self.search_client_cfg.document_cls = self.document_cls
 
+        # assign embedding_provider to CorpusManager & SearchClient configs
+        if not self.corpus_manager_cfg.embedding_provider:
+            self.corpus_manager_cfg.embedding_provider = self.embedding_provider
+        if not self.search_client_cfg.embedding_provider:
+            self.search_client_cfg.embedding_provider = self.embedding_provider
+
     model_config = {"arbitrary_types_allowed": True}
 
 
