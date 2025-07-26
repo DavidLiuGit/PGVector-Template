@@ -3,10 +3,9 @@ from datetime import datetime
 from logging import getLogger
 from typing import Any, Type, Sequence
 
-from pydantic import BaseModel, Field, model_validator
-from sqlalchemy import text, select, or_, and_
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from sqlalchemy import select, or_
 from sqlalchemy.sql import Select
-from pgvector.sqlalchemy import Vector
 
 from pgvector_template.core import (
     BaseEmbeddingProvider,
@@ -23,7 +22,7 @@ class SearchQuery(BaseModel):
     """Standardized search query structure. At least 1 search criterion is required."""
 
     text: str | None = None
-    """String to approximate-search (using vector distance) in a semantic search."""
+    """String to match against using in a semantic search, i.e. using vector distance."""
     keywords: list[str] | None = None
     """List of keywords to exact-match in a keyword search."""
     metadata_filters: dict[str, Any] | None = None
@@ -35,6 +34,8 @@ class SearchQuery(BaseModel):
         ge=1,
     )
     """Maximum number of results to return."""
+
+    model_config = ConfigDict(use_attribute_docstrings=True)
 
     @model_validator(mode="after")
     def ensure_criterion(self):

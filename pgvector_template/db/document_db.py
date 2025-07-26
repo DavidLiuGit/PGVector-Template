@@ -37,7 +37,7 @@ class DocumentDatabaseManager(DatabaseManager):
         self.schema_name = f"{self.SCHEMA_PREFIX}{schema_suffix}"
         self.document_classes = document_classes
 
-    def setup(self) -> None:
+    def setup(self) -> str:
         """One-step setup: initialize connection, create schema and tables for all document classes"""
         self.initialize()
         self.create_schema(self.schema_name)
@@ -50,6 +50,7 @@ class DocumentDatabaseManager(DatabaseManager):
         self.logger.info(
             f"Document database setup complete for {self.schema_name} with {len(self.document_classes)} tables"
         )
+        return self.schema_name
 
 
 class TempDocumentDatabaseManager(DocumentDatabaseManager):

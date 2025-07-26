@@ -86,7 +86,7 @@ class BaseDocument(Base):
     """Flexible metadata as JSON"""
     origin_url = Column(String(2048), nullable=True)
     """Optional source URL"""
-    language = Column(String(10), default="en")
+    language = Column(String(2), default="en")
     """Language of the content (ISO 639-1 code), e.g., 'en', 'es', 'zh'."""
     score = Column(Float, nullable=True)
     """Optional score assigned during ingestion (e.g., relevance, confidence)."""

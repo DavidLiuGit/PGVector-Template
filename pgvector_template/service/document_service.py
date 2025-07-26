@@ -50,8 +50,10 @@ class DocumentServiceConfig(BaseModel):
         # iff either config is an instance of their respective base config classes (and not a subclass)
         if type(self.corpus_manager_cfg) is BaseCorpusManagerConfig:
             self.corpus_manager_cfg.document_cls = self.document_cls
+            self.corpus_manager_cfg.document_metadata_cls = self.document_metadata_cls
         if type(self.search_client_cfg) is BaseSearchClientConfig:
             self.search_client_cfg.document_cls = self.document_cls
+            self.search_client_cfg.document_metadata_cls = self.document_metadata_cls
 
         # assign embedding_provider to CorpusManager & SearchClient configs
         if not self.corpus_manager_cfg.embedding_provider:
