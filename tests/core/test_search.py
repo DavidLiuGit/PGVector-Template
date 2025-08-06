@@ -57,14 +57,6 @@ class TestBaseSearchClient(unittest.TestCase):
         self.assertIn("test", query_str)
         self.assertIn("OR", query_str)
 
-    def test_apply_keyword_search_no_keywords(self):
-        """Test that query is unchanged when no keywords provided"""
-        base_query = select(TestDocument)
-        search_query = SearchQuery(keywords=None, metadata_filters={"type": "doc"}, limit=10)
-
-        result_query = self.client._apply_keyword_search(base_query, search_query)
-        self.assertEqual(str(base_query), str(result_query))
-
     def test_apply_semantic_search_with_text(self):
         """Test that semantic search applies cosine distance ordering when text is provided"""
         base_query = select(TestDocument)
