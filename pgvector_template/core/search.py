@@ -200,3 +200,6 @@ class BaseSearchClient:
         for result in results:
             retrieval_results.append(RetrievalResult(document=result, score=1.0))
         return retrieval_results
+
+
+
