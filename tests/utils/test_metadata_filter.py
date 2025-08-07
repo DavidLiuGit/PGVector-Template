@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 from pgvector_template.core.document import BaseDocumentMetadata
 from pgvector_template.core.search import MetadataFilter
-from pgvector_template.utils.metadata_filter import validate_metadata_filter, validate_condition_compatibility
+from pgvector_template.utils.metadata_filter import validate_metadata_filter, validate_metadata_filters, validate_condition_compatibility
 
 
 class TestMetadata(BaseDocumentMetadata):
@@ -112,6 +112,34 @@ class TestValidateMetadataFilter(unittest.TestCase):
             validate_metadata_filter(filter_obj, TestMetadata)
         
         self.assertIn("Condition 'gt' not valid for field type str", str(context.exception))
+
+
+class TestValidateMetadataFilters(unittest.TestCase):
+    """Test validate_metadata_filters function."""
+
+    def test_valid_filters_list(self):
+        """Test validation of list with all valid filters."""
+        filters = [
+            MetadataFilter(field_name="author", condition="eq", value="John Doe"),
+            MetadataFilter(field_name="year", condition="gte", value=2020),
+            MetadataFilter(field_name="tags", condition="contains", value="AI")
+        ]
+        validate_metadata_filters(filters, TestMetadata)  # Should not raise
+
+    def test_empty_filters_list(self):
+        """Test validation of empty filters list."""
+        validate_metadata_filters([], TestMetadata)  # Should not raise
+
+    def test_invalid_filter_in_list(self):
+        """Test that invalid filter in list raises error."""
+        filters = [
+            MetadataFilter(field_name="author", condition="eq", value="John Doe"),
+            MetadataFilter(field_name="nonexistent", condition="eq", value="test")
+        ]
+        with self.assertRaises(ValueError) as context:
+            validate_metadata_filters(filters, TestMetadata)
+        
+        self.assertIn("Field 'nonexistent' not found in metadata schema", str(context.exception))
 
 
 class TestValidateConditionCompatibility(unittest.TestCase):

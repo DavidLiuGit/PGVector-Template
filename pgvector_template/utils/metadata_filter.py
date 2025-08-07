@@ -1,7 +1,20 @@
 from typing import Type
 
 from pgvector_template.core.document import BaseDocumentMetadata
-from pgvector_template.core.search import MetadataFilter
+from pgvector_template.models.search import MetadataFilter
+
+
+def validate_metadata_filters(
+    filter_obj_list: list[MetadataFilter], metadata_cls: Type[BaseDocumentMetadata]
+) -> None:
+    """Validate a `list[MetadataFilter]` against schema and condition compatibility.
+
+    Args:
+        filter_obj_list (list[MetadataFilter]): _description_
+        metadata_cls (Type[BaseDocumentMetadata]): _description_
+    """
+    for metadata_filter_obj in filter_obj_list:
+        validate_metadata_filter(metadata_filter_obj, metadata_cls)
 
 
 def validate_metadata_filter(

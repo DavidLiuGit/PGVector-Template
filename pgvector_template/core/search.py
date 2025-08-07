@@ -1,10 +1,9 @@
-from dataclasses import dataclass, asdict
-from datetime import datetime
 from logging import getLogger
 from typing import Any, Literal, Type, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select, or_
+from sqlalchemy.orm import Session
 from sqlalchemy.sql import Select
 
 from pgvector_template.core import (
@@ -12,66 +11,11 @@ from pgvector_template.core import (
     BaseDocument,
     BaseDocumentMetadata,
 )
-from sqlalchemy.orm import Session
+from pgvector_template.models.search import SearchQuery, MetadataFilter, RetrievalResult
+from pgvector_template.utils.metadata_filter import validate_metadata_filters
 
 
 logger = getLogger(__name__)
-
-
-class MetadataFilter(BaseModel):
-    field_name: str
-    """Field path in metadata. Use dot notation for nested fields (e.g., 'publication_info.journal')"""
-    condition: Literal["eq", "gt", "gte", "lt", "lte", "contains", "in", "exists"]
-    """
-    Comparison operator: 
-        - eq=equal
-        - gt/gte=greater than/equal
-        - lt/lte=less than/equal
-        - contains=array contains value
-        - in=value in array
-        - exists=field exists
-    """
-    value: Any
-    """Value to compare against. Type should match field type (str, int, float, bool, list)"""
-
-    model_config = ConfigDict(use_attribute_docstrings=True)
-
-
-class SearchQuery(BaseModel):
-    """Standardized search query structure. At least 1 search criterion is required."""
-
-    text: str | None = None
-    """String to match against using in a semantic search, i.e. using vector distance."""
-    keywords: list[str] | None = None
-    """List of keywords to exact-match in a keyword search."""
-    metadata_filters: list[MetadataFilter] | None = None
-    """List of metadata filters that must be matched."""
-    date_range: tuple[datetime, datetime] | None = None
-    """Retrieve/limit results based on created_at & updated_at timestamps"""
-    limit: int = Field(
-        ...,
-        ge=1,
-    )
-    """Maximum number of results to return."""
-
-    model_config = ConfigDict(use_attribute_docstrings=True)
-
-    @model_validator(mode="after")
-    def ensure_criterion(self):
-        if not any([self.text, self.keywords, self.metadata_filters, self.date_range]):
-            raise ValueError("At least one search criterion is required")
-        return self
-
-
-@dataclass
-class RetrievalResult:
-    """Standardized result structure for all retrieval operations"""
-
-    document: BaseDocument
-    score: float
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
 
 
 class BaseSearchClientConfig(BaseModel):
@@ -140,7 +84,7 @@ class BaseSearchClient:
         results = self.session.scalars(db_query).all()
         return self._convert_to_retrieval_results(results)
 
-    def _apply_semantic_search(self, query: Select, search_query: SearchQuery) -> Select:
+    def _apply_semantic_search(self, db_query: Select, search_query: SearchQuery) -> Select:
         """Apply semantic (vector) search criteria to the query.
         `embedding_provider` must be provided at instantiation, or an `ValueError` will be raised.
         In PGVector, `<=>` operator is used to compare cosine distance. Lower = more similar.
@@ -153,9 +97,11 @@ class BaseSearchClient:
             Updated SQLAlchemy query with semantic search applied.
         """
         if not search_query.text:
-            return query
+            return db_query
         query_embedding = self.embedding_provider.embed_text(search_query.text)
-        return query.order_by(self.config.document_cls.embedding.cosine_distance(query_embedding))
+        return db_query.order_by(
+            self.config.document_cls.embedding.cosine_distance(query_embedding)
+        )
 
     def _apply_keyword_search(self, db_query: Select, search_query: SearchQuery) -> Select:
         """Apply keyword (full-text) search criteria to the query.
@@ -174,7 +120,7 @@ class BaseSearchClient:
             conditions.append(self.config.document_cls.content.ilike(f"%{keyword}%"))
         return db_query.where(or_(*conditions))
 
-    def _apply_metadata_filters(self, query: Select, search_query: SearchQuery) -> Select:
+    def _apply_metadata_filters(self, db_query: Select, search_query: SearchQuery) -> Select:
         """Apply metadata filters to the query.
 
         Args:
@@ -184,6 +130,11 @@ class BaseSearchClient:
         Returns:
             Updated SQLAlchemy query with metadata filters applied.
         """
+        if not search_query.metadata_filters:
+            return db_query
+
+        validate_metadata_filters(search_query.metadata_filters, self.config.document_metadata_cls)
+
         raise NotImplementedError
 
     def _convert_to_retrieval_results(self, results: Sequence[Any]) -> list[RetrievalResult]:
@@ -200,6 +151,3 @@ class BaseSearchClient:
         for result in results:
             retrieval_results.append(RetrievalResult(document=result, score=1.0))
         return retrieval_results
-
-
-
