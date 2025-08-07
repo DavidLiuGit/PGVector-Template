@@ -1,6 +1,6 @@
 from dataclasses import dataclass, asdict
 from datetime import datetime
-from typing import Any, Literal, Type, Sequence
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 

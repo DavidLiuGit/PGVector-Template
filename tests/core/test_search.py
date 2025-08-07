@@ -5,8 +5,9 @@ from sqlalchemy import select, Column
 from pgvector.sqlalchemy import Vector
 
 from pgvector_template.core.embedder import BaseEmbeddingProvider
-from pgvector_template.core.search import BaseSearchClient, BaseSearchClientConfig, SearchQuery
+from pgvector_template.core.search import BaseSearchClient, BaseSearchClientConfig
 from pgvector_template.core import BaseDocument
+from pgvector_template.models.search import SearchQuery
 
 
 class TestDocument(BaseDocument):
