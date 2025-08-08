@@ -5,11 +5,16 @@ from pydantic import BaseModel, Field
 
 from pgvector_template.core.document import BaseDocumentMetadata
 from pgvector_template.core.search import MetadataFilter
-from pgvector_template.utils.metadata_filter import validate_metadata_filter, validate_metadata_filters, validate_condition_compatibility
+from pgvector_template.utils.metadata_filter import (
+    validate_metadata_filter,
+    validate_metadata_filters,
+    validate_condition_compatibility,
+)
 
 
 class TestMetadata(BaseDocumentMetadata):
     """Test metadata class with various field types."""
+
     author: str
     year: int
     score: float
@@ -32,6 +37,7 @@ class DocumentStats(BaseModel):
 
 class NestedMetadata(BaseDocumentMetadata):
     """Test metadata with nested structure."""
+
     publication_info: PublicationInfo
     stats: DocumentStats
 
@@ -64,7 +70,9 @@ class TestValidateMetadataFilter(unittest.TestCase):
     def test_valid_nested_field_filters(self):
         """Test validation of filters on nested fields."""
         # Nested string field
-        filter1 = MetadataFilter(field_name="publication_info.journal", condition="eq", value="Nature")
+        filter1 = MetadataFilter(
+            field_name="publication_info.journal", condition="eq", value="Nature"
+        )
         validate_metadata_filter(filter1, NestedMetadata)  # Should not raise
 
         # Nested integer field
@@ -72,46 +80,40 @@ class TestValidateMetadataFilter(unittest.TestCase):
         validate_metadata_filter(filter2, NestedMetadata)  # Should not raise
 
         # Nested list field
-        filter3 = MetadataFilter(field_name="publication_info.pages", condition="contains", value=42)
+        filter3 = MetadataFilter(
+            field_name="publication_info.pages", condition="contains", value=42
+        )
         validate_metadata_filter(filter3, NestedMetadata)  # Should not raise
 
     def test_nonexistent_field_error(self):
         """Test error when field doesn't exist in schema."""
         filter_obj = MetadataFilter(field_name="nonexistent", condition="eq", value="test")
-        
+
         with self.assertRaises(ValueError) as context:
             validate_metadata_filter(filter_obj, TestMetadata)
-        
+
         self.assertIn("Field 'nonexistent' not found in metadata schema", str(context.exception))
 
     def test_nonexistent_nested_field_error(self):
         """Test error when nested field doesn't exist."""
-        filter_obj = MetadataFilter(field_name="publication_info.nonexistent", condition="eq", value="test")
-        
+        filter_obj = MetadataFilter(
+            field_name="publication_info.nonexistent", condition="eq", value="test"
+        )
+
         with self.assertRaises(ValueError) as context:
             validate_metadata_filter(filter_obj, NestedMetadata)
-        
+
         # The actual error message depends on implementation details
         self.assertTrue("nonexistent" in str(context.exception))
 
     def test_invalid_nested_navigation_error(self):
         """Test error when trying to navigate into non-model field."""
         filter_obj = MetadataFilter(field_name="author.invalid", condition="eq", value="test")
-        
-        with self.assertRaises(ValueError) as context:
-            validate_metadata_filter(filter_obj, TestMetadata)
-        
-        self.assertIn("Cannot navigate into non-model field 'author'", str(context.exception))
 
-    def test_condition_compatibility_validation(self):
-        """Test that condition compatibility is validated."""
-        # Invalid condition for string field
-        filter_obj = MetadataFilter(field_name="author", condition="gt", value="test")
-        
         with self.assertRaises(ValueError) as context:
             validate_metadata_filter(filter_obj, TestMetadata)
-        
-        self.assertIn("Condition 'gt' not valid for field type str", str(context.exception))
+
+        self.assertIn("Cannot navigate into non-model field 'author'", str(context.exception))
 
 
 class TestValidateMetadataFilters(unittest.TestCase):
@@ -122,7 +124,7 @@ class TestValidateMetadataFilters(unittest.TestCase):
         filters = [
             MetadataFilter(field_name="author", condition="eq", value="John Doe"),
             MetadataFilter(field_name="year", condition="gte", value=2020),
-            MetadataFilter(field_name="tags", condition="contains", value="AI")
+            MetadataFilter(field_name="tags", condition="contains", value="AI"),
         ]
         validate_metadata_filters(filters, TestMetadata)  # Should not raise
 
@@ -134,11 +136,11 @@ class TestValidateMetadataFilters(unittest.TestCase):
         """Test that invalid filter in list raises error."""
         filters = [
             MetadataFilter(field_name="author", condition="eq", value="John Doe"),
-            MetadataFilter(field_name="nonexistent", condition="eq", value="test")
+            MetadataFilter(field_name="nonexistent", condition="eq", value="test"),
         ]
         with self.assertRaises(ValueError) as context:
             validate_metadata_filters(filters, TestMetadata)
-        
+
         self.assertIn("Field 'nonexistent' not found in metadata schema", str(context.exception))
 
 
@@ -148,18 +150,18 @@ class TestValidateConditionCompatibility(unittest.TestCase):
     def test_field_type_conditions(self):
         """Test valid and invalid conditions for all field types."""
         test_cases = [
-            (str, {"eq", "in", "exists"}, {"gt", "contains"}),
+            (str, {"eq", "gt", "gte", "lt", "lte", "in", "exists"}, {"contains"}),
             (int, {"eq", "gt", "gte", "lt", "lte", "exists"}, {"contains", "in"}),
             (float, {"eq", "gt", "gte", "lt", "lte", "exists"}, {"contains", "in"}),
             (bool, {"eq", "exists"}, {"gt", "contains"}),
-            (list, {"contains", "in", "exists"}, {"eq", "gt"})
+            (list, {"contains", "in", "exists"}, {"eq", "gt"}),
         ]
-        
+
         for field_type, valid_conditions, invalid_conditions in test_cases:
             # Test valid conditions
             for condition in valid_conditions:
                 validate_condition_compatibility(field_type, condition)
-            
+
             # Test invalid conditions
             for condition in invalid_conditions:
                 with self.assertRaises(ValueError):
@@ -167,12 +169,13 @@ class TestValidateConditionCompatibility(unittest.TestCase):
 
     def test_unknown_field_type_defaults(self):
         """Test that unknown field types default to eq and exists conditions."""
+
         class CustomType:
             pass
-        
+
         for condition in {"eq", "exists"}:
             validate_condition_compatibility(CustomType, condition)
-        
+
         with self.assertRaises(ValueError):
             validate_condition_compatibility(CustomType, "gt")
 

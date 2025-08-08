@@ -123,7 +123,7 @@ class BaseSearchClient:
     def _apply_metadata_filters(self, db_query: Select, search_query: SearchQuery) -> Select:
         """
         Apply metadata filters to the query. All condtions in `search_query.metadata_filters`,
-        if not None, are ANDed together. Metadata filters are applied against 
+        if not None, are ANDed together. Metadata filters are applied against
         `BaseDocument.document_metadata` JSONB field.
 
         Args:
@@ -163,16 +163,20 @@ class BaseSearchClient:
                 else field_ref == filter_obj.value
             )
         elif filter_obj.condition in {"gt", "gte", "lt", "lte"}:
-            cast_type = Integer if isinstance(filter_obj.value, int) else Float
-            field_cast = field_ref.astext.cast(cast_type)
+            if isinstance(filter_obj.value, str):
+                field_text = field_ref.astext
+            else:
+                cast_type = Integer if isinstance(filter_obj.value, int) else Float
+                field_text = field_ref.astext.cast(cast_type)
+
             if filter_obj.condition == "gt":
-                return field_cast > filter_obj.value
+                return field_text > filter_obj.value
             elif filter_obj.condition == "gte":
-                return field_cast >= filter_obj.value
+                return field_text >= filter_obj.value
             elif filter_obj.condition == "lt":
-                return field_cast < filter_obj.value
+                return field_text < filter_obj.value
             else:  # lte
-                return field_cast <= filter_obj.value
+                return field_text <= filter_obj.value
         elif filter_obj.condition == "contains":
             return field_ref.contains(filter_obj.value)
         elif filter_obj.condition == "in":

@@ -21,7 +21,7 @@ def validate_metadata_filter(
     filter_obj: MetadataFilter, metadata_cls: Type[BaseDocumentMetadata]
 ) -> None:
     """Validate metadata filter against schema and condition compatibility.
-    
+
     Note: This validates the schema structure but cannot guarantee runtime data conformity.
     JSONB field access like field_ref[part] will succeed even if the actual data doesn't match the schema.
 
@@ -67,7 +67,7 @@ def validate_condition_compatibility(field_type: Type, condition: str) -> None:
             field_type = args[0]  # First non-None type
 
     valid_conditions = {
-        str: {"eq", "in", "exists"},
+        str: {"eq", "gt", "gte", "lt", "lte", "in", "exists"},
         int: {"eq", "gt", "gte", "lt", "lte", "exists"},
         float: {"eq", "gt", "gte", "lt", "lte", "exists"},
         bool: {"eq", "exists"},
