@@ -145,78 +145,34 @@ class TestValidateMetadataFilters(unittest.TestCase):
 class TestValidateConditionCompatibility(unittest.TestCase):
     """Test validate_condition_compatibility function."""
 
-    def test_string_field_conditions(self):
-        """Test valid and invalid conditions for string fields."""
-        # Valid conditions
-        validate_condition_compatibility(str, "eq")  # Should not raise
-        validate_condition_compatibility(str, "exists")  # Should not raise
+    def test_field_type_conditions(self):
+        """Test valid and invalid conditions for all field types."""
+        test_cases = [
+            (str, {"eq", "exists"}, {"gt", "contains"}),
+            (int, {"eq", "gt", "gte", "lt", "lte", "exists"}, {"contains", "in"}),
+            (float, {"eq", "gt", "gte", "lt", "lte", "exists"}, {"contains", "in"}),
+            (bool, {"eq", "exists"}, {"gt", "contains"}),
+            (list, {"contains", "in", "exists"}, {"eq", "gt"})
+        ]
         
-        # Invalid conditions
-        with self.assertRaises(ValueError):
-            validate_condition_compatibility(str, "gt")
-        
-        with self.assertRaises(ValueError):
-            validate_condition_compatibility(str, "contains")
-
-    def test_integer_field_conditions(self):
-        """Test valid and invalid conditions for integer fields."""
-        # Valid conditions
-        for condition in ["eq", "gt", "gte", "lt", "lte", "exists"]:
-            validate_condition_compatibility(int, condition)  # Should not raise
-        
-        # Invalid conditions
-        with self.assertRaises(ValueError):
-            validate_condition_compatibility(int, "contains")
-        
-        with self.assertRaises(ValueError):
-            validate_condition_compatibility(int, "in")
-
-    def test_float_field_conditions(self):
-        """Test valid and invalid conditions for float fields."""
-        # Valid conditions
-        for condition in ["eq", "gt", "gte", "lt", "lte", "exists"]:
-            validate_condition_compatibility(float, condition)  # Should not raise
-        
-        # Invalid conditions
-        with self.assertRaises(ValueError):
-            validate_condition_compatibility(float, "contains")
-
-    def test_boolean_field_conditions(self):
-        """Test valid and invalid conditions for boolean fields."""
-        # Valid conditions
-        validate_condition_compatibility(bool, "eq")  # Should not raise
-        validate_condition_compatibility(bool, "exists")  # Should not raise
-        
-        # Invalid conditions
-        with self.assertRaises(ValueError):
-            validate_condition_compatibility(bool, "gt")
-        
-        with self.assertRaises(ValueError):
-            validate_condition_compatibility(bool, "contains")
-
-    def test_list_field_conditions(self):
-        """Test valid and invalid conditions for list fields."""
-        # Valid conditions
-        for condition in ["contains", "in", "exists"]:
-            validate_condition_compatibility(list, condition)  # Should not raise
-        
-        # Invalid conditions
-        with self.assertRaises(ValueError):
-            validate_condition_compatibility(list, "eq")
-        
-        with self.assertRaises(ValueError):
-            validate_condition_compatibility(list, "gt")
+        for field_type, valid_conditions, invalid_conditions in test_cases:
+            # Test valid conditions
+            for condition in valid_conditions:
+                validate_condition_compatibility(field_type, condition)
+            
+            # Test invalid conditions
+            for condition in invalid_conditions:
+                with self.assertRaises(ValueError):
+                    validate_condition_compatibility(field_type, condition)
 
     def test_unknown_field_type_defaults(self):
         """Test that unknown field types default to eq and exists conditions."""
         class CustomType:
             pass
         
-        # Valid default conditions
-        validate_condition_compatibility(CustomType, "eq")  # Should not raise
-        validate_condition_compatibility(CustomType, "exists")  # Should not raise
+        for condition in {"eq", "exists"}:
+            validate_condition_compatibility(CustomType, condition)
         
-        # Invalid conditions
         with self.assertRaises(ValueError):
             validate_condition_compatibility(CustomType, "gt")
 

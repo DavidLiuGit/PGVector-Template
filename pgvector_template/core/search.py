@@ -2,7 +2,7 @@ from logging import getLogger
 from typing import Any, Type, Sequence
 
 from pydantic import BaseModel, Field
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, Integer, Float
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import Select
 
@@ -76,8 +76,8 @@ class BaseSearchClient:
         if query.text:
             db_query = self._apply_semantic_search(db_query, query)
         db_query = self._apply_keyword_search(db_query, query)
-        # if query.metadata_filters:
-        #     db_query = self._apply_metadata_filters(db_query, query)
+        if query.metadata_filters:
+            db_query = self._apply_metadata_filters(db_query, query)
         db_query = db_query.limit(query.limit)
 
         # execute query and return results
@@ -130,12 +130,51 @@ class BaseSearchClient:
         Returns:
             Updated SQLAlchemy query with metadata filters applied.
         """
-        if not search_query.metadata_filters:
-            return db_query
+        # if not search_query.metadata_filters:
+        #     return db_query
 
         validate_metadata_filters(search_query.metadata_filters, self.config.document_metadata_cls)
 
-        raise NotImplementedError
+        conditions = []
+        for filter_obj in search_query.metadata_filters:
+            field_path = filter_obj.field_name.split(".")
+            metadata_col = self.config.document_cls.document_metadata
+            
+            # Navigate to the field using JSONB path
+            field_ref = metadata_col
+            for part in field_path:
+                field_ref = field_ref[part]
+            
+            if filter_obj.condition == "eq":
+                if isinstance(filter_obj.value, str):
+                    conditions.append(field_ref.astext == filter_obj.value)
+                else:
+                    conditions.append(field_ref == filter_obj.value)
+            elif filter_obj.condition in ["gt", "gte", "lt", "lte"]:
+                cast_type = Integer if isinstance(filter_obj.value, int) else Float
+                field_cast = field_ref.astext.cast(cast_type)
+                if filter_obj.condition == "gt":
+                    conditions.append(field_cast > filter_obj.value)
+                elif filter_obj.condition == "gte":
+                    conditions.append(field_cast >= filter_obj.value)
+                elif filter_obj.condition == "lt":
+                    conditions.append(field_cast < filter_obj.value)
+                elif filter_obj.condition == "lte":
+                    conditions.append(field_cast <= filter_obj.value)
+            elif filter_obj.condition == "contains":
+                conditions.append(field_ref.contains(filter_obj.value))
+            elif filter_obj.condition == "in":
+                conditions.append(field_ref.astext.in_([str(v) for v in filter_obj.value]))
+            elif filter_obj.condition == "exists":
+                if len(field_path) == 1:
+                    conditions.append(metadata_col.has_key(field_path[0]))
+                else:
+                    parent_ref = metadata_col
+                    for part in field_path[:-1]:
+                        parent_ref = parent_ref[part]
+                    conditions.append(parent_ref.has_key(field_path[-1]))
+        
+        return db_query.where(*conditions) if conditions else db_query
 
     def _convert_to_retrieval_results(self, results: Sequence[Any]) -> list[RetrievalResult]:
         """Convert database results to RetrievalResult objects.
