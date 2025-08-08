@@ -148,7 +148,7 @@ class TestValidateConditionCompatibility(unittest.TestCase):
     def test_field_type_conditions(self):
         """Test valid and invalid conditions for all field types."""
         test_cases = [
-            (str, {"eq", "exists"}, {"gt", "contains"}),
+            (str, {"eq", "in", "exists"}, {"gt", "contains"}),
             (int, {"eq", "gt", "gte", "lt", "lte", "exists"}, {"contains", "in"}),
             (float, {"eq", "gt", "gte", "lt", "lte", "exists"}, {"contains", "in"}),
             (bool, {"eq", "exists"}, {"gt", "contains"}),

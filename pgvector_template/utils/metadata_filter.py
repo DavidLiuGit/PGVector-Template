@@ -67,7 +67,7 @@ def validate_condition_compatibility(field_type: Type, condition: str) -> None:
             field_type = args[0]  # First non-None type
 
     valid_conditions = {
-        str: {"eq", "exists"},
+        str: {"eq", "in", "exists"},
         int: {"eq", "gt", "gte", "lt", "lte", "exists"},
         float: {"eq", "gt", "gte", "lt", "lte", "exists"},
         bool: {"eq", "exists"},
