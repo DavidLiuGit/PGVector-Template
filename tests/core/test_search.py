@@ -145,6 +145,17 @@ class TestBaseSearchClient(unittest.TestCase):
         result_query = self.client._apply_metadata_filters(base_query, search_query)
         self.assertEqual(str(base_query), str(result_query))
 
+    def test_unsupported_condition_raises_error(self):
+        """Test that unsupported condition raises ValueError"""
+        # Create filter with invalid condition (bypass pydantic validation)
+        filter_obj = MetadataFilter(field_name="author", condition="eq", value="test")
+        filter_obj.condition = "regex"  # Set invalid condition
+        
+        with self.assertRaises(ValueError) as context:
+            self.client._build_metadata_filter_where_condition(filter_obj)
+        
+        self.assertIn("Unsupported condition: regex", str(context.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -230,6 +230,20 @@ class TestDocumentServiceE2E:
                 assert len(gt_results) > 0, "Should find high priority documents"
                 assert all(r.document.document_metadata["priority"] > 3 for r in gt_results)
 
+                # Test less than filter
+                lt_filter = MetadataFilter(field_name="priority", condition="lt", value=4)
+                lt_query = SearchQuery(metadata_filters=[lt_filter], limit=10)
+                lt_results = service.search_client.search(lt_query)
+                assert len(lt_results) > 0, "Should find low priority documents"
+                assert all(r.document.document_metadata["priority"] < 4 for r in lt_results)
+
+                # Test less than or equal filter
+                lte_filter = MetadataFilter(field_name="priority", condition="lte", value=3)
+                lte_query = SearchQuery(metadata_filters=[lte_filter], limit=10)
+                lte_results = service.search_client.search(lte_query)
+                assert len(lte_results) > 0, "Should find medium/low priority documents"
+                assert all(r.document.document_metadata["priority"] <= 3 for r in lte_results)
+
                 # Test contains filter (array contains value)
                 contains_filter = MetadataFilter(field_name="tags", condition="contains", value="ai")
                 contains_query = SearchQuery(metadata_filters=[contains_filter], limit=10)
@@ -255,6 +269,13 @@ class TestDocumentServiceE2E:
                 nested_exists_query = SearchQuery(metadata_filters=[nested_exists_filter], limit=10)
                 nested_exists_results = service.search_client.search(nested_exists_query)
                 assert len(nested_exists_results) > 0, "Should find documents with nested info.version field"
+
+                # Test 'in' condition
+                in_filter = MetadataFilter(field_name="author", condition="in", value=["researcher", "engineer"])
+                in_query = SearchQuery(metadata_filters=[in_filter], limit=10)
+                in_results = service.search_client.search(in_query)
+                assert len(in_results) > 0, "Should find documents with authors in list"
+                assert all(r.document.document_metadata["author"] in ["researcher", "engineer"] for r in in_results)
 
                 # Test combined metadata filters (AND logic)
                 combined_filters = [
