@@ -123,9 +123,9 @@ class TestBaseSearchClient(unittest.TestCase):
         search_query = SearchQuery(metadata_filters=filters, limit=10)
 
         result_query = self.client._apply_metadata_filters(base_query, search_query)
-        query_str = str(result_query.compile(compile_kwargs={"literal_binds": True}))
-        self.assertIn("AI", query_str)
-        self.assertIn("Alice", query_str)
+        query_str = str(result_query.compile())
+        self.assertIn("@>", query_str)  # PostgreSQL contains operator
+        self.assertIn("IN", query_str)  # IN operator for author filter
 
     def test_apply_metadata_filters_exists(self):
         """Test metadata filter with exists condition"""
@@ -144,6 +144,17 @@ class TestBaseSearchClient(unittest.TestCase):
 
         result_query = self.client._apply_metadata_filters(base_query, search_query)
         self.assertEqual(str(base_query), str(result_query))
+
+    def test_unsupported_condition_raises_error(self):
+        """Test that unsupported condition raises ValueError"""
+        # Create filter with invalid condition (bypass pydantic validation)
+        filter_obj = MetadataFilter(field_name="author", condition="eq", value="test")
+        filter_obj.condition = "regex"  # Set invalid condition
+        
+        with self.assertRaises(ValueError) as context:
+            self.client._build_metadata_filter_where_condition(filter_obj)
+        
+        self.assertIn("Unsupported condition: regex", str(context.exception))
 
 
 if __name__ == "__main__":

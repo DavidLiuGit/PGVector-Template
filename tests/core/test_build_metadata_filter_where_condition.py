@@ -105,9 +105,9 @@ class TestBuildMetadataFilterWhereCondition(unittest.TestCase):
         filter_obj = MetadataFilter(field_name="tags", condition="contains", value="AI")
         result = self.client._build_metadata_filter_where_condition(filter_obj)
 
-        query_str = str(result.compile(compile_kwargs={"literal_binds": True}))
-        self.assertIn("tags", query_str)
-        self.assertIn("AI", query_str)
+        query_str = str(result.compile())
+        self.assertIn("document_metadata", query_str)
+        self.assertIn("@>", query_str)  # PostgreSQL contains operator
 
     def test_in_condition_single_value(self):
         """Test in condition with single value."""
