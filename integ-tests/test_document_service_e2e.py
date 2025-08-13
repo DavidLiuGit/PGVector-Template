@@ -9,9 +9,9 @@ Test DocumentService end-to-end, by:
 
 from logging import getLogger
 import numpy as np
-from typing import Any, Type
 
 from pgvector.sqlalchemy import Vector
+from pydantic import BaseModel
 from sqlalchemy import Column
 
 from pgvector_template.core.document import (
@@ -22,6 +22,7 @@ from pgvector_template.core.document import (
 from pgvector_template.core.manager import BaseCorpusManager, BaseCorpusManagerConfig
 from pgvector_template.core.embedder import BaseEmbeddingProvider
 from pgvector_template.core.search import BaseSearchClient, BaseSearchClientConfig, SearchQuery
+from pgvector_template.models.search import MetadataFilter
 from pgvector_template.service.document_service import DocumentService, DocumentServiceConfig
 from pgvector_template.db import TempDocumentDatabaseManager
 
@@ -78,6 +79,12 @@ class SimpleEmbeddingProvider(BaseEmbeddingProvider):
         return 16
 
 
+class NestedInfo(BaseModel):
+    """Nested metadata for testing"""
+    version: str = "1.0"
+    date: str = "2024-01-01"
+
+
 class TestDocumentMetadataE2E(BaseDocumentMetadata):
     """Test document metadata for E2E"""
 
@@ -85,6 +92,9 @@ class TestDocumentMetadataE2E(BaseDocumentMetadata):
     schema_version: str = "1.0"
     source: str
     author: str
+    priority: int = 1
+    tags: list[str] = []
+    info: NestedInfo = NestedInfo()
 
 
 class TestDocumentServiceE2E:
@@ -132,7 +142,13 @@ class TestDocumentServiceE2E:
 
                 # Insert corpora using CorpusManager
                 corpus_text_1 = "Machine learning algorithms process data efficiently. Deep learning models require extensive training."
-                metadata_1 = {"source": "ml_textbook", "author": "researcher"}
+                metadata_1 = {
+                    "source": "ml_textbook", 
+                    "author": "researcher", 
+                    "priority": 5, 
+                    "tags": ["ai", "ml"],
+                    "info": {"version": "2.0", "date": "2024-03-01"}
+                }
                 optional_props_1 = BaseDocumentOptionalProps(
                     title="ML Concepts",
                     collection="ai_docs",
@@ -145,13 +161,23 @@ class TestDocumentServiceE2E:
                 assert corpus_1_doc_count >= 1, "Should return 1-or-more documents inserted"
 
                 corpus_text_2 = "Database systems store information reliably. SQL queries retrieve specific data records."
-                metadata_2 = {"source": "db_manual", "author": "engineer"}
+                metadata_2 = {"source": "db_manual", "author": "engineer", "priority": 3, "tags": ["database", "sql"]}
                 optional_props_2 = BaseDocumentOptionalProps(
                     title="Database Fundamentals", collection="tech_docs", tags=["database", "sql"]
                 )
 
                 corpus_id_2 = service.corpus_manager.insert_corpus(
                     corpus_text_2, metadata_2, optional_props_2
+                )
+
+                corpus_text_3 = "Web development frameworks simplify application building. Modern tools enhance productivity."
+                metadata_3 = {"source": "web_guide", "author": "developer", "priority": 2, "tags": ["web", "frameworks"]}
+                optional_props_3 = BaseDocumentOptionalProps(
+                    title="Web Development", collection="tech_docs", tags=["web", "development"]
+                )
+
+                corpus_id_3 = service.corpus_manager.insert_corpus(
+                    corpus_text_3, metadata_3, optional_props_3
                 )
 
                 session.commit()
@@ -188,6 +214,80 @@ class TestDocumentServiceE2E:
                 # Should find documents containing "data" and semantically similar to "neural networks"
                 found_data_content = any("data" in r.document.content for r in combined_results)
                 assert found_data_content, "Combined search should find content with keyword 'data'"
+
+                ##### Test 4: Metadata filter tests
+                # Test equality filter
+                eq_filter = MetadataFilter(field_name="author", condition="eq", value="researcher")
+                eq_query = SearchQuery(metadata_filters=[eq_filter], limit=10)
+                eq_results = service.search_client.search(eq_query)
+                assert len(eq_results) > 0, "Should find documents by author"
+                assert all(r.document.document_metadata["author"] == "researcher" for r in eq_results)
+
+                # Test greater than filter
+                gt_filter = MetadataFilter(field_name="priority", condition="gt", value=3)
+                gt_query = SearchQuery(metadata_filters=[gt_filter], limit=10)
+                gt_results = service.search_client.search(gt_query)
+                assert len(gt_results) > 0, "Should find high priority documents"
+                assert all(r.document.document_metadata["priority"] > 3 for r in gt_results)
+
+                # Test less than filter
+                lt_filter = MetadataFilter(field_name="priority", condition="lt", value=4)
+                lt_query = SearchQuery(metadata_filters=[lt_filter], limit=10)
+                lt_results = service.search_client.search(lt_query)
+                assert len(lt_results) > 0, "Should find low priority documents"
+                assert all(r.document.document_metadata["priority"] < 4 for r in lt_results)
+
+                # Test less than or equal filter
+                lte_filter = MetadataFilter(field_name="priority", condition="lte", value=3)
+                lte_query = SearchQuery(metadata_filters=[lte_filter], limit=10)
+                lte_results = service.search_client.search(lte_query)
+                assert len(lte_results) > 0, "Should find medium/low priority documents"
+                assert all(r.document.document_metadata["priority"] <= 3 for r in lte_results)
+
+                # Test contains filter (array contains value)
+                contains_filter = MetadataFilter(field_name="tags", condition="contains", value="ai")
+                contains_query = SearchQuery(metadata_filters=[contains_filter], limit=10)
+                contains_results = service.search_client.search(contains_query)
+                assert len(contains_results) > 0, "Should find documents with 'ai' tag"
+                assert all("ai" in r.document.document_metadata["tags"] for r in contains_results)
+
+                # Test exists filter
+                exists_filter = MetadataFilter(field_name="priority", condition="exists", value=None)
+                exists_query = SearchQuery(metadata_filters=[exists_filter], limit=10)
+                exists_results = service.search_client.search(exists_query)
+                assert len(exists_results) > 0, "Should find documents with priority field"
+
+                # Test string comparison (gt condition with string)
+                str_gt_filter = MetadataFilter(field_name="author", condition="gt", value="engineer")
+                str_gt_query = SearchQuery(metadata_filters=[str_gt_filter], limit=10)
+                str_gt_results = service.search_client.search(str_gt_query)
+                assert len(str_gt_results) > 0, "Should find documents with author > 'engineer'"
+                assert all(r.document.document_metadata["author"] > "engineer" for r in str_gt_results)
+
+                # Test nested field exists condition
+                nested_exists_filter = MetadataFilter(field_name="info.version", condition="exists", value=None)
+                nested_exists_query = SearchQuery(metadata_filters=[nested_exists_filter], limit=10)
+                nested_exists_results = service.search_client.search(nested_exists_query)
+                assert len(nested_exists_results) > 0, "Should find documents with nested info.version field"
+
+                # Test 'in' condition
+                in_filter = MetadataFilter(field_name="author", condition="in", value=["researcher", "engineer"])
+                in_query = SearchQuery(metadata_filters=[in_filter], limit=10)
+                in_results = service.search_client.search(in_query)
+                assert len(in_results) > 0, "Should find documents with authors in list"
+                assert all(r.document.document_metadata["author"] in ["researcher", "engineer"] for r in in_results)
+
+                # Test combined metadata filters (AND logic)
+                combined_filters = [
+                    MetadataFilter(field_name="source", condition="eq", value="db_manual"),
+                    MetadataFilter(field_name="priority", condition="gte", value=3)
+                ]
+                combined_meta_query = SearchQuery(metadata_filters=combined_filters, limit=10)
+                combined_meta_results = service.search_client.search(combined_meta_query)
+                assert len(combined_meta_results) > 0, "Should find documents matching both filters"
+                for result in combined_meta_results:
+                    assert result.document.document_metadata["source"] == "db_manual"
+                    assert result.document.document_metadata["priority"] >= 3
 
                 ##### Corpus recovery test
                 ml_corpus_id = str(keyword_results[0].document.corpus_id)
