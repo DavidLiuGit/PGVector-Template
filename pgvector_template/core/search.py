@@ -178,7 +178,7 @@ class BaseSearchClient:
             else:  # lte
                 return field_text <= filter_obj.value
         elif filter_obj.condition == "contains":
-            return field_ref.contains(filter_obj.value)
+            return field_ref.contains([filter_obj.value])
         elif filter_obj.condition == "in":
             return field_ref.astext.in_([str(v) for v in filter_obj.value])
         elif filter_obj.condition == "exists":

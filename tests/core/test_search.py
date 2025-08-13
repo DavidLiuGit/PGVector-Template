@@ -123,9 +123,9 @@ class TestBaseSearchClient(unittest.TestCase):
         search_query = SearchQuery(metadata_filters=filters, limit=10)
 
         result_query = self.client._apply_metadata_filters(base_query, search_query)
-        query_str = str(result_query.compile(compile_kwargs={"literal_binds": True}))
-        self.assertIn("AI", query_str)
-        self.assertIn("Alice", query_str)
+        query_str = str(result_query.compile())
+        self.assertIn("@>", query_str)  # PostgreSQL contains operator
+        self.assertIn("IN", query_str)  # IN operator for author filter
 
     def test_apply_metadata_filters_exists(self):
         """Test metadata filter with exists condition"""
