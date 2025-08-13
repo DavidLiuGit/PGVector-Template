@@ -190,6 +190,8 @@ class BaseDocumentMetadata(BaseModel):
     Base metadata structure.
     It is generally expected that every `BaseDocument`'s metadata follows this exact schema,
     without any extraneous properties, or any missing properties, to avoid ambiguity.
+    It is mandatory to include a description with every field/property.
+    May contain nested Pydantic models, but they may not be optional. Instead, set defaults.
     """
 
     document_type: str = Field(

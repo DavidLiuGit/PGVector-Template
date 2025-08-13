@@ -9,9 +9,9 @@ Test DocumentService end-to-end, by:
 
 from logging import getLogger
 import numpy as np
-from typing import Any, Type
 
 from pgvector.sqlalchemy import Vector
+from pydantic import BaseModel
 from sqlalchemy import Column
 
 from pgvector_template.core.document import (
@@ -79,6 +79,12 @@ class SimpleEmbeddingProvider(BaseEmbeddingProvider):
         return 16
 
 
+class NestedInfo(BaseModel):
+    """Nested metadata for testing"""
+    version: str = "1.0"
+    date: str = "2024-01-01"
+
+
 class TestDocumentMetadataE2E(BaseDocumentMetadata):
     """Test document metadata for E2E"""
 
@@ -88,6 +94,7 @@ class TestDocumentMetadataE2E(BaseDocumentMetadata):
     author: str
     priority: int = 1
     tags: list[str] = []
+    info: NestedInfo = NestedInfo()
 
 
 class TestDocumentServiceE2E:
@@ -135,7 +142,13 @@ class TestDocumentServiceE2E:
 
                 # Insert corpora using CorpusManager
                 corpus_text_1 = "Machine learning algorithms process data efficiently. Deep learning models require extensive training."
-                metadata_1 = {"source": "ml_textbook", "author": "researcher", "priority": 5, "tags": ["ai", "ml"]}
+                metadata_1 = {
+                    "source": "ml_textbook", 
+                    "author": "researcher", 
+                    "priority": 5, 
+                    "tags": ["ai", "ml"],
+                    "info": {"version": "2.0", "date": "2024-03-01"}
+                }
                 optional_props_1 = BaseDocumentOptionalProps(
                     title="ML Concepts",
                     collection="ai_docs",
@@ -229,6 +242,19 @@ class TestDocumentServiceE2E:
                 exists_query = SearchQuery(metadata_filters=[exists_filter], limit=10)
                 exists_results = service.search_client.search(exists_query)
                 assert len(exists_results) > 0, "Should find documents with priority field"
+
+                # Test string comparison (gt condition with string)
+                str_gt_filter = MetadataFilter(field_name="author", condition="gt", value="engineer")
+                str_gt_query = SearchQuery(metadata_filters=[str_gt_filter], limit=10)
+                str_gt_results = service.search_client.search(str_gt_query)
+                assert len(str_gt_results) > 0, "Should find documents with author > 'engineer'"
+                assert all(r.document.document_metadata["author"] > "engineer" for r in str_gt_results)
+
+                # Test nested field exists condition
+                nested_exists_filter = MetadataFilter(field_name="info.version", condition="exists", value=None)
+                nested_exists_query = SearchQuery(metadata_filters=[nested_exists_filter], limit=10)
+                nested_exists_results = service.search_client.search(nested_exists_query)
+                assert len(nested_exists_results) > 0, "Should find documents with nested info.version field"
 
                 # Test combined metadata filters (AND logic)
                 combined_filters = [

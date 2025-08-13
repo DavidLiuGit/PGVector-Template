@@ -44,7 +44,9 @@ def validate_metadata_filter(
         field_type = field_info.annotation
 
         # Handle nested models
-        if hasattr(field_type, "model_fields"):
+        if not field_type:
+            raise ValueError(f"Field '{filter_obj.field_name}' not found in metadata schema")
+        elif hasattr(field_type, "model_fields"):
             current_field_info = field_type.model_fields
         elif i < len(field_path) - 1:
             raise ValueError(
