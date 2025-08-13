@@ -8,6 +8,10 @@ from pgvector_template.core import BaseDocument
 
 
 class MetadataFilter(BaseModel):
+    """
+    An object acting as a filter for an arbitrary `Metadata` dictionary/map/object.
+    """
+    
     field_name: str
     """Field path in metadata. Use dot notation for nested fields (e.g., 'publication_info.journal')"""
     condition: Literal["eq", "gt", "gte", "lt", "lte", "contains", "in", "exists"]
@@ -16,7 +20,7 @@ class MetadataFilter(BaseModel):
         - eq=equal
         - gt/gte=greater than/equal
         - lt/lte=less than/equal
-        - contains=array contains value
+        - contains=array contains values (accepts array)
         - in=value in array
         - exists=field exists
     """
@@ -31,12 +35,12 @@ class SearchQuery(BaseModel):
 
     text: str | None = None
     """String to match against using in a semantic search, i.e. using vector distance."""
-    keywords: list[str] | None = None
-    """List of keywords to exact-match in a keyword search."""
-    metadata_filters: list[MetadataFilter] | None = None
-    """List of metadata filters that must be matched."""
+    keywords: list[str] = []
+    """List of keywords to **exact-match** in a keyword search."""
+    metadata_filters: list[MetadataFilter] = []
+    """List of metadata filter conditions that must be matched."""
     date_range: tuple[datetime, datetime] | None = None
-    """Retrieve/limit results based on created_at & updated_at timestamps"""
+    """Retrieve/limit results based on created_at & updated_at timestamps (i.e. database operations)"""
     limit: int = Field(
         ...,
         ge=1,
