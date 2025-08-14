@@ -1,17 +1,17 @@
 from dataclasses import dataclass, asdict
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, Type
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from pgvector_template.core import BaseDocument
+from pgvector_template.core import BaseDocument, BaseDocumentMetadata
 
 
 class MetadataFilter(BaseModel):
     """
     An object acting as a filter for an arbitrary `Metadata` dictionary/map/object.
     """
-    
+
     field_name: str
     """Field path in metadata. Use dot notation for nested fields (e.g., 'publication_info.journal')"""
     condition: Literal["eq", "gt", "gte", "lt", "lte", "contains", "in", "exists"]
@@ -37,8 +37,14 @@ class SearchQuery(BaseModel):
     """String to match against using in a semantic search, i.e. using vector distance."""
     keywords: list[str] = []
     """List of keywords to **exact-match** in a keyword search."""
-    metadata_filters: list[MetadataFilter] = []
-    """List of metadata filter conditions that must be matched."""
+    metadata_filters: list[MetadataFilter] = Field(
+        default=[],
+        json_schema_extra={"metadata_schema": BaseDocumentMetadata.model_json_schema()},
+    )
+    """
+    List of metadata conditions that must be matched.
+    Refer to `metadata_schema` for the expected schema, as it exists in the database.
+    """
     date_range: tuple[datetime, datetime] | None = None
     """Retrieve/limit results based on created_at & updated_at timestamps (i.e. database operations)"""
     limit: int = Field(
@@ -47,7 +53,10 @@ class SearchQuery(BaseModel):
     )
     """Maximum number of results to return."""
 
-    model_config = ConfigDict(use_attribute_docstrings=True)
+    model_config = ConfigDict(
+        use_attribute_docstrings=True,
+        arbitrary_types_allowed=True,
+    )
 
     @model_validator(mode="after")
     def ensure_criterion(self):

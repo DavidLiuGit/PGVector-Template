@@ -138,7 +138,9 @@ class BaseSearchClient:
 
         # strictly speaking, this validation step is optional. You may override this method to disable
         try:
-            validate_metadata_filters(search_query.metadata_filters, self.config.document_metadata_cls)
+            validate_metadata_filters(
+                search_query.metadata_filters, self.config.document_metadata_cls
+            )
         except ValueError as e:
             logger.warning(f"Metadata filter validation failed: {e}. Query success not guaranteed!")
 
