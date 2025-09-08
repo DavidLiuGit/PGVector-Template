@@ -195,9 +195,12 @@ class BaseDocumentMetadata(BaseModel):
     """
 
     document_type: str = Field(
-        ..., description="Description for type of document, e.g. markdown, pdf, etc"
+        ..., description="Original document type/format/extension, e.g. md, pdf, html, json, etc"
     )
-    schema_version: str = Field(default="1.0", description="Schema version for the metadata")
+    schema_version: str = Field(
+        default="1.0",
+        description="Schema version for the metadata. Intended for housekeeping only",
+    )
 
     def to_dict(self) -> dict[str, Any]:
         return self.model_dump()

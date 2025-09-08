@@ -31,7 +31,9 @@ class MetadataFilter(BaseModel):
 
 
 class SearchQuery(BaseModel):
-    """Standardized search query structure. At least 1 search criterion is required."""
+    """
+    Standardized search query structure. At least 1 search criterion is required.
+    """
 
     text: str | None = None
     """String to match against using in a semantic search, i.e. using vector distance."""
