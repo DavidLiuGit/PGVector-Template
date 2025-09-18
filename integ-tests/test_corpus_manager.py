@@ -5,11 +5,17 @@ Integration tests for the BaseCorpusManager class
 import numpy as np
 from textwrap import dedent
 from typing import Any, Type
+from uuid import uuid4
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import Column
+from sqlalchemy.exc import IntegrityError
 
-from pgvector_template.core.document import BaseDocument, BaseDocumentMetadata, BaseDocumentOptionalProps
+from pgvector_template.core.document import (
+    BaseDocument,
+    BaseDocumentMetadata,
+    BaseDocumentOptionalProps,
+)
 from pgvector_template.core.manager import BaseCorpusManager, BaseCorpusManagerConfig
 from pgvector_template.core.embedder import BaseEmbeddingProvider
 from pgvector_template.db import TempDocumentDatabaseManager
@@ -73,7 +79,7 @@ class ParagraphCorpusManager(BaseCorpusManager):
         paragraphs = [p.strip() for p in content.split(self.corpus_delimiter) if p.strip()]
         return paragraphs
 
-    def _extract_chunk_metadata(self, content: str) -> dict[str, Any]:
+    def _extract_chunk_metadata(self, content: str, **kwargs) -> dict[str, Any]:
         """Extract metadata from chunk content"""
         # Add some basic metadata about the chunk
         return {
@@ -81,12 +87,14 @@ class ParagraphCorpusManager(BaseCorpusManager):
             "word_count": len(content.split()),
         }
 
-    def _join_documents(self, documents: list[BaseDocument]) -> tuple[str, dict[str, Any]]:
+    def _join_documents(
+        self, documents: list[BaseDocument], **kwargs
+    ) -> tuple[str, dict[str, Any]]:
         documents.sort(key=lambda d: d.chunk_index)  # type: ignore
         corpus_content = self.corpus_delimiter.join(d.content for d in documents)  # type: ignore
         return corpus_content, self._infer_corpus_metadata(documents)
 
-    def _infer_corpus_metadata(self, documents: list[BaseDocument]) -> dict[str, Any]:
+    def _infer_corpus_metadata(self, documents: list[BaseDocument], **kwargs) -> dict[str, Any]:
         return super()._infer_corpus_metadata(documents)
 
 
@@ -95,7 +103,7 @@ class TestCorpusManagerConfig(BaseCorpusManagerConfig):
 
     document_cls: Type[BaseDocument] = TestDocument
     embedding_provider: BaseEmbeddingProvider | None = SimpleEmbeddingProvider()
-    document_metadata_cls: Type[BaseDocumentMetadata] | None = TestDocumentMetadata
+    document_metadata_cls: Type[BaseDocumentMetadata] = TestDocumentMetadata
 
 
 class TestCorpusManagerIntegration:
@@ -105,7 +113,9 @@ class TestCorpusManagerIntegration:
         """Test inserting a corpus with paragraph splitting"""
         # Create a temporary document database manager and schema
         db_manager = TempDocumentDatabaseManager(
-            database_url=database_url, schema_suffix="corpus_mgr_test", document_classes=[TestDocument]
+            database_url=database_url,
+            schema_suffix="corpus_mgr_test",
+            document_classes=[TestDocument],
         )
         temp_schema = db_manager.setup()
 
@@ -131,7 +141,11 @@ class TestCorpusManagerIntegration:
                 )
 
                 # Create metadata and optional properties
-                metadata = {"source": "integration_test", "author": "test_user", "created_at": "2023-01-01"}
+                metadata = {
+                    "source": "integration_test",
+                    "author": "test_user",
+                    "created_at": "2023-01-01",
+                }
 
                 optional_props = BaseDocumentOptionalProps(
                     title="Test Document with Paragraphs",
@@ -162,7 +176,9 @@ class TestCorpusManagerIntegration:
                 ]
 
                 for expected in expected_contents:
-                    assert any(expected in content for content in contents), f"Expected content not found: {expected}"
+                    assert any(
+                        expected in content for content in contents
+                    ), f"Expected content not found: {expected}"
 
                 # Check that metadata was properly combined
                 for doc in docs:
@@ -206,11 +222,59 @@ class TestCorpusManagerIntegration:
             # Clean up temp schema
             db_manager.cleanup(temp_schema)
 
+    def test_insert_corpus_unique_constraint_violation(self, database_url: str):
+        """Test that inserting the same corpus twice with update_if_exists=False raises SQLAlchemy exception"""
+        db_manager = TempDocumentDatabaseManager(
+            database_url=database_url, schema_suffix="unique_test", document_classes=[TestDocument]
+        )
+        temp_schema = db_manager.setup()
+
+        try:
+            with db_manager.get_session() as session:
+                config = TestCorpusManagerConfig()
+                manager = ParagraphCorpusManager(session, config)
+
+                sample_text = "Test paragraph for unique constraint."
+                metadata = {"source": "test", "author": "tester"}
+                optional_props = BaseDocumentOptionalProps(collection="test_collection")
+
+                # First insertion should succeed
+                reused_uuid = uuid4()
+                manager.insert_corpus(
+                    sample_text,
+                    metadata,
+                    optional_props,
+                    corpus_id=reused_uuid,
+                    update_if_exists=False,
+                )
+
+                # Second insertion with same corpus_id should fail due to unique constraint on (collection, corpus_id, chunk_index)
+                exception_raised = False
+                try:
+                    manager.insert_corpus(
+                        sample_text,
+                        metadata,
+                        optional_props,
+                        corpus_id=reused_uuid,
+                        update_if_exists=False,
+                    )
+                except (IntegrityError, Exception) as e:
+                    exception_raised = True
+                    # Verify it's related to unique constraint
+                    assert "unique" in str(e).lower() or "duplicate" in str(e).lower()
+
+                assert exception_raised, "Expected database constraint violation exception"
+
+        finally:
+            db_manager.cleanup(temp_schema)
+
     def test_read_only_corpus_manager(self, database_url: str):
         """Test using corpus manager for read-only operations without embedding provider"""
         # Create a temporary document database manager and schema
         db_manager = TempDocumentDatabaseManager(
-            database_url=database_url, schema_suffix="corpus_read_test", document_classes=[TestDocument]
+            database_url=database_url,
+            schema_suffix="corpus_read_test",
+            document_classes=[TestDocument],
         )
         temp_schema = db_manager.setup()
 
@@ -222,7 +286,7 @@ class TestCorpusManagerIntegration:
 
                 sample_text = "First paragraph.\n\nSecond paragraph."
                 metadata = {"source": "test", "author": "user"}
-                corpus_id = full_manager.insert_corpus(sample_text, metadata)
+                full_manager.insert_corpus(sample_text, metadata)
                 session.commit()
 
                 # Now test read-only operations with minimal config

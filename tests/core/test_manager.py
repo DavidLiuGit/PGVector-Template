@@ -232,7 +232,12 @@ class TestBaseDocumentManager(unittest.TestCase):
 
             # Call the method under test
             result = self.manager.insert_documents(
-                corpus_id, document_contents, document_embeddings, corpus_metadata, optional_props
+                corpus_id,
+                document_contents,
+                document_embeddings,
+                corpus_metadata,
+                optional_props,
+                update_if_exists=False,
             )
 
             # Assertions
@@ -293,7 +298,11 @@ class TestBaseDocumentManager(unittest.TestCase):
             # Call the method under test
             with patch.object(MockDocument, "from_props", side_effect=mock_docs):
                 self.manager.insert_documents(
-                    corpus_id, document_contents, document_embeddings, corpus_metadata
+                    corpus_id,
+                    document_contents,
+                    document_embeddings,
+                    corpus_metadata,
+                    update_if_exists=False,
                 )
 
             # Verify _extract_chunk_metadata was called for each document
@@ -350,6 +359,7 @@ class TestBaseDocumentManager(unittest.TestCase):
                 [[0.1, 0.2], [0.3, 0.4]],
                 corpus_metadata,
                 optional_props,
+                True,  # update_if_exists
             )
 
     def test_insert_corpus_empty_content(self):
@@ -389,7 +399,11 @@ class TestBaseDocumentManager(unittest.TestCase):
 
         # Call the method under test
         result = self.manager.insert_documents(
-            corpus_id, document_contents, document_embeddings, corpus_metadata
+            corpus_id,
+            document_contents,
+            document_embeddings,
+            corpus_metadata,
+            update_if_exists=False,
         )
 
         # Assertions

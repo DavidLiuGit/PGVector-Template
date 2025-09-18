@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from logging import getLogger
-from typing import Any, Type
+from typing import Any, Literal, Type
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
@@ -111,6 +111,7 @@ class BaseCorpusManager(ABC):
         corpus_metadata: dict[str, Any],
         optional_props: BaseDocumentOptionalProps | None = None,
         corpus_id: UUID | str | None = None,
+        update_if_exists: bool = True,
         **kwargs,
     ) -> int:
         """
@@ -130,7 +131,12 @@ class BaseCorpusManager(ABC):
         document_contents = self._split_corpus(content)
         document_embeddings = self.embedding_provider.embed_batch(document_contents)
         return self.insert_documents(
-            corpus_id, document_contents, document_embeddings, corpus_metadata, optional_props
+            corpus_id,
+            document_contents,
+            document_embeddings,
+            corpus_metadata,
+            optional_props,
+            update_if_exists,
         )
 
     def insert_documents(
@@ -140,6 +146,7 @@ class BaseCorpusManager(ABC):
         document_embeddings: list[list[float]],
         corpus_metadata: dict[str, Any],
         optional_props: BaseDocumentOptionalProps | None = None,
+        update_if_exists: bool = True,
         **kwargs,
     ) -> int:
         """
@@ -176,7 +183,12 @@ class BaseCorpusManager(ABC):
                     optional_props=optional_props,
                 )
             )
-        self.session.add_all(documents_to_insert)
+
+        if update_if_exists:
+            for doc in documents_to_insert:
+                self.session.merge(doc)
+        else:
+            self.session.add_all(documents_to_insert)
         self.session.commit()
         return len(documents_to_insert)
 
