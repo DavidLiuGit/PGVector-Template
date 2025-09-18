@@ -201,7 +201,7 @@ class BaseCorpusManager(ABC):
             logger.warning(
                 "Using default _split_corpus. Override this method to improve performance."
             )
-        split_content = [content[i : i + 1000] for i in range(0, len(content), 1000)]
+        split_content = [content[i : i + 1024 * 4] for i in range(0, len(content), 1024 * 4)]
         return [c for c in split_content if len(c.strip()) > 0]
 
     def _join_documents(
