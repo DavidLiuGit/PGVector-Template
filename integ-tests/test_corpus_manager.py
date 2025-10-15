@@ -312,3 +312,285 @@ class TestCorpusManagerIntegration:
         finally:
             # Clean up temp schema
             db_manager.cleanup(temp_schema)
+
+    def test_insert_corpus_update_if_exists_true(self, database_url: str):
+        """Test that inserting the same corpus twice with update_if_exists=True updates existing documents"""
+        db_manager = TempDocumentDatabaseManager(
+            database_url=database_url, schema_suffix="update_true_test", document_classes=[TestDocument]
+        )
+        temp_schema = db_manager.setup()
+
+        try:
+            with db_manager.get_session() as session:
+                config = TestCorpusManagerConfig()
+                manager = ParagraphCorpusManager(session, config)
+
+                # Initial corpus
+                original_text = "Original paragraph."
+                original_metadata = {"source": "test", "author": "original_author"}
+                optional_props = BaseDocumentOptionalProps(collection="test_collection")
+                corpus_id = uuid4()
+
+                # First insertion
+                num_docs = manager.insert_corpus(
+                    original_text,
+                    original_metadata,
+                    optional_props,
+                    corpus_id=corpus_id,
+                    update_if_exists=True,
+                )
+                assert num_docs == 1
+
+                # Verify initial state
+                docs = session.query(TestDocument).filter(TestDocument.corpus_id == corpus_id).all()
+                assert len(docs) == 1
+                assert docs[0].content == "Original paragraph."
+                assert docs[0].document_metadata["author"] == "original_author"
+
+                # Update with new content and metadata
+                updated_text = "Updated paragraph with new content."
+                updated_metadata = {"source": "test", "author": "updated_author"}
+
+                num_docs = manager.insert_corpus(
+                    updated_text,
+                    updated_metadata,
+                    optional_props,
+                    corpus_id=corpus_id,
+                    update_if_exists=True,
+                )
+                assert num_docs == 1
+
+                # Verify update
+                docs = session.query(TestDocument).filter(TestDocument.corpus_id == corpus_id).all()
+                assert len(docs) == 1  # Still only one document
+                assert docs[0].content == "Updated paragraph with new content."
+                assert docs[0].document_metadata["author"] == "updated_author"
+
+        finally:
+            db_manager.cleanup(temp_schema)
+
+    def test_insert_documents_update_if_exists_true(self, database_url: str):
+        """Test that insert_documents with update_if_exists=True updates existing documents"""
+        db_manager = TempDocumentDatabaseManager(
+            database_url=database_url, schema_suffix="docs_update_test", document_classes=[TestDocument]
+        )
+        temp_schema = db_manager.setup()
+
+        try:
+            with db_manager.get_session() as session:
+                config = TestCorpusManagerConfig()
+                manager = ParagraphCorpusManager(session, config)
+                corpus_id = uuid4()
+
+                # Initial documents
+                original_contents = ["First chunk", "Second chunk"]
+                original_embeddings = manager.embedding_provider.embed_batch(original_contents)
+                original_metadata = {"source": "test", "author": "original"}
+                optional_props = BaseDocumentOptionalProps(collection="test_collection")
+
+                num_docs = manager.insert_documents(
+                    corpus_id,
+                    original_contents,
+                    original_embeddings,
+                    original_metadata,
+                    optional_props,
+                    update_if_exists=True,
+                )
+                assert num_docs == 2
+
+                # Verify initial state
+                docs = session.query(TestDocument).filter(TestDocument.corpus_id == corpus_id).all()
+                assert len(docs) == 2
+                contents = [doc.content for doc in docs]
+                assert "First chunk" in contents
+                assert "Second chunk" in contents
+
+                # Update with modified content
+                updated_contents = ["Updated first chunk", "Updated second chunk"]
+                updated_embeddings = manager.embedding_provider.embed_batch(updated_contents)
+                updated_metadata = {"source": "test", "author": "updated"}
+
+                num_docs = manager.insert_documents(
+                    corpus_id,
+                    updated_contents,
+                    updated_embeddings,
+                    updated_metadata,
+                    optional_props,
+                    update_if_exists=True,
+                )
+                assert num_docs == 2
+
+                # Verify update
+                docs = session.query(TestDocument).filter(TestDocument.corpus_id == corpus_id).all()
+                assert len(docs) == 2  # Still only two documents
+                contents = [doc.content for doc in docs]
+                assert "Updated first chunk" in contents
+                assert "Updated second chunk" in contents
+                for doc in docs:
+                    assert doc.document_metadata["author"] == "updated"
+
+        finally:
+            db_manager.cleanup(temp_schema)
+
+    def test_insert_documents_update_if_exists_false(self, database_url: str):
+        """Test that insert_documents with update_if_exists=False raises constraint violation"""
+        db_manager = TempDocumentDatabaseManager(
+            database_url=database_url, schema_suffix="docs_no_update_test", document_classes=[TestDocument]
+        )
+        temp_schema = db_manager.setup()
+
+        try:
+            with db_manager.get_session() as session:
+                config = TestCorpusManagerConfig()
+                manager = ParagraphCorpusManager(session, config)
+                corpus_id = uuid4()
+
+                # Initial documents
+                contents = ["First chunk", "Second chunk"]
+                embeddings = manager.embedding_provider.embed_batch(contents)
+                metadata = {"source": "test", "author": "tester"}
+                optional_props = BaseDocumentOptionalProps(collection="test_collection")
+
+                # First insertion should succeed
+                num_docs = manager.insert_documents(
+                    corpus_id,
+                    contents,
+                    embeddings,
+                    metadata,
+                    optional_props,
+                    update_if_exists=False,
+                )
+                assert num_docs == 2
+
+                # Second insertion should fail
+                exception_raised = False
+                try:
+                    manager.insert_documents(
+                        corpus_id,
+                        contents,
+                        embeddings,
+                        metadata,
+                        optional_props,
+                        update_if_exists=False,
+                    )
+                except (IntegrityError, Exception) as e:
+                    exception_raised = True
+                    assert "unique" in str(e).lower() or "duplicate" in str(e).lower()
+
+                assert exception_raised, "Expected database constraint violation exception"
+
+        finally:
+            db_manager.cleanup(temp_schema)
+
+    def test_insert_corpus_different_chunk_counts_update_if_exists_true(self, database_url: str):
+        """Test updating corpus with different number of chunks using update_if_exists=True"""
+        db_manager = TempDocumentDatabaseManager(
+            database_url=database_url, schema_suffix="chunk_count_test", document_classes=[TestDocument]
+        )
+        temp_schema = db_manager.setup()
+
+        try:
+            with db_manager.get_session() as session:
+                config = TestCorpusManagerConfig()
+                manager = ParagraphCorpusManager(session, config)
+                corpus_id = uuid4()
+
+                # Initial corpus with 2 paragraphs
+                original_text = "First paragraph.\n\nSecond paragraph."
+                metadata = {"source": "test", "author": "tester"}
+                optional_props = BaseDocumentOptionalProps(collection="test_collection")
+
+                num_docs = manager.insert_corpus(
+                    original_text,
+                    metadata,
+                    optional_props,
+                    corpus_id=corpus_id,
+                    update_if_exists=True,
+                )
+                assert num_docs == 2
+
+                # Verify initial state
+                docs = session.query(TestDocument).filter(TestDocument.corpus_id == corpus_id).all()
+                assert len(docs) == 2
+
+                # Update with 3 paragraphs
+                updated_text = "Updated first.\n\nUpdated second.\n\nNew third paragraph."
+                num_docs = manager.insert_corpus(
+                    updated_text,
+                    metadata,
+                    optional_props,
+                    corpus_id=corpus_id,
+                    update_if_exists=True,
+                )
+                assert num_docs == 3
+
+                # Verify update - should now have 3 documents (old ones deleted, new ones added)
+                docs = session.query(TestDocument).filter(TestDocument.corpus_id == corpus_id).all()
+                assert len(docs) == 3, f"Expected 3 documents after update, got {len(docs)}"
+                contents = [doc.content for doc in docs]
+                assert "Updated first." in contents, f"Expected 'Updated first.' in {contents}"
+                assert "Updated second." in contents, f"Expected 'Updated second.' in {contents}"
+                assert "New third paragraph." in contents, f"Expected 'New third paragraph.' in {contents}"
+
+        finally:
+            db_manager.cleanup(temp_schema)
+
+    def test_insert_corpus_update_deletes_entire_corpus(self, database_url: str):
+        """Test that updating a corpus deletes all documents with that corpus_id regardless of collection"""
+        db_manager = TempDocumentDatabaseManager(
+            database_url=database_url, schema_suffix="corpus_delete_test", document_classes=[TestDocument]
+        )
+        temp_schema = db_manager.setup()
+
+        try:
+            with db_manager.get_session() as session:
+                config = TestCorpusManagerConfig()
+                manager = ParagraphCorpusManager(session, config)
+                corpus_id = uuid4()
+
+                # Insert corpus with collection A
+                text_a = "Collection A content."
+                metadata = {"source": "test", "author": "tester"}
+                props_a = BaseDocumentOptionalProps(collection="collection_a")
+
+                manager.insert_corpus(
+                    text_a,
+                    metadata,
+                    props_a,
+                    corpus_id=corpus_id,
+                    update_if_exists=True,
+                )
+
+                # Verify document exists
+                docs = session.query(TestDocument).filter(TestDocument.corpus_id == corpus_id).all()
+                assert len(docs) == 1
+                assert docs[0].collection == "collection_a"
+                assert docs[0].content == "Collection A content."
+
+                # Update same corpus_id with different collection - should replace entirely
+                text_b = "Collection B content."
+                props_b = BaseDocumentOptionalProps(collection="collection_b")
+
+                manager.insert_corpus(
+                    text_b,
+                    metadata,
+                    props_b,
+                    corpus_id=corpus_id,
+                    update_if_exists=True,
+                )
+
+                # Verify only collection B document exists now
+                docs = session.query(TestDocument).filter(TestDocument.corpus_id == corpus_id).all()
+                assert len(docs) == 1
+                assert docs[0].collection == "collection_b"
+                assert docs[0].content == "Collection B content."
+
+                # Verify collection A document was deleted
+                docs_a = session.query(TestDocument).filter(
+                    TestDocument.corpus_id == corpus_id,
+                    TestDocument.collection == "collection_a"
+                ).all()
+                assert len(docs_a) == 0
+
+        finally:
+            db_manager.cleanup(temp_schema)

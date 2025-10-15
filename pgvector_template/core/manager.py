@@ -165,32 +165,58 @@ class BaseCorpusManager(ABC):
         Raises:
             ValueError: If the length of document_contents doesn't match document_embeddings
         """
-        if len(document_contents) != len(document_embeddings):
-            raise ValueError("Number of embeddings does not match number of documents")
+        self._validate_inputs(document_contents, document_embeddings)
         if len(document_contents) == 0:
             return 0
-        documents_to_insert = []
-        for i in range(len(document_contents)):
-            chunk_md = self._extract_chunk_metadata(document_contents[i])
+
+        documents_to_insert = self._create_documents(
+            corpus_id, document_contents, document_embeddings, corpus_metadata, optional_props
+        )
+
+        if update_if_exists:
+            self._delete_existing_corpus(corpus_id)
+
+        self.session.add_all(documents_to_insert)
+        self.session.commit()
+        return len(documents_to_insert)
+
+    def _validate_inputs(
+        self, document_contents: list[str], document_embeddings: list[list[float]]
+    ) -> None:
+        """Validate that document contents and embeddings match in length"""
+        if len(document_contents) != len(document_embeddings):
+            raise ValueError("Number of embeddings does not match number of documents")
+
+    def _create_documents(
+        self,
+        corpus_id: UUID | str,
+        document_contents: list[str],
+        document_embeddings: list[list[float]],
+        corpus_metadata: dict[str, Any],
+        optional_props: BaseDocumentOptionalProps | None,
+    ) -> list[BaseDocument]:
+        """Create document instances from the provided data"""
+        documents = []
+        for i, (content, embedding) in enumerate(zip(document_contents, document_embeddings)):
+            chunk_md = self._extract_chunk_metadata(content)
             base_metadata = self.document_metadata_class(**(corpus_metadata | chunk_md))
-            documents_to_insert.append(
+            documents.append(
                 self.config.document_cls.from_props(
                     corpus_id=corpus_id,
                     chunk_index=i,
-                    content=document_contents[i],
-                    embedding=document_embeddings[i],
+                    content=content,
+                    embedding=embedding,
                     metadata=base_metadata.model_dump(),
                     optional_props=optional_props,
                 )
             )
+        return documents
 
-        if update_if_exists:
-            for doc in documents_to_insert:
-                self.session.merge(doc)
-        else:
-            self.session.add_all(documents_to_insert)
-        self.session.commit()
-        return len(documents_to_insert)
+    def _delete_existing_corpus(self, corpus_id: UUID | str) -> None:
+        """Delete all existing documents for the given corpus_id"""
+        self.session.query(self.config.document_cls).filter(
+            self.config.document_cls.corpus_id == corpus_id
+        ).delete()
 
     def _split_corpus(self, content: str, **kwargs) -> list[str]:
         """
