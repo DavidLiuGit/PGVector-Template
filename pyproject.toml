@@ -32,6 +32,10 @@ test = [
 dev = [
     "black>=23.0.0",
 ]
+dist = [
+    "build>=1.2.2",
+    "twine>=6.1.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/DavidLiuGit/PGVector-Template"
