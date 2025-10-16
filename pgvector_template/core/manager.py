@@ -214,9 +214,12 @@ class BaseCorpusManager(ABC):
 
     def _delete_existing_corpus(self, corpus_id: UUID | str) -> None:
         """Delete all existing documents for the given corpus_id"""
-        self.session.query(self.config.document_cls).filter(
+        query = self.session.query(self.config.document_cls).filter(
             self.config.document_cls.corpus_id == corpus_id
-        ).delete()
+        )
+        if count := query.count():
+            logger.warning(f"Deleting {count} existing documents for corpus_id: {corpus_id}")
+            query.delete()
 
     def _split_corpus(self, content: str, **kwargs) -> list[str]:
         """

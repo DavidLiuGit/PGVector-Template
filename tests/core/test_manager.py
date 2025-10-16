@@ -605,5 +605,63 @@ class TestBaseDocumentManager(unittest.TestCase):
             self.assertEqual(metadata, {"inferred": "metadata"})
 
 
+    def test_delete_existing_corpus_no_documents(self):
+        """Test _delete_existing_corpus when no documents exist"""
+        corpus_id = "test-corpus-id"
+        
+        # Mock query that returns 0 count
+        mock_query = MagicMock()
+        self.session.query.return_value = mock_query
+        mock_query.filter.return_value = mock_query
+        mock_query.count.return_value = 0
+        
+        with patch("pgvector_template.core.manager.logger") as mock_logger:
+            self.manager._delete_existing_corpus(corpus_id)
+            
+            # Verify no warning was logged
+            mock_logger.warning.assert_not_called()
+            # Verify delete was not called since count is 0
+            mock_query.delete.assert_not_called()
+    
+    def test_delete_existing_corpus_with_documents(self):
+        """Test _delete_existing_corpus when documents exist"""
+        corpus_id = "test-corpus-id"
+        
+        # Mock query that returns 3 documents
+        mock_query = MagicMock()
+        self.session.query.return_value = mock_query
+        mock_query.filter.return_value = mock_query
+        mock_query.count.return_value = 3
+        
+        with patch("pgvector_template.core.manager.logger") as mock_logger:
+            self.manager._delete_existing_corpus(corpus_id)
+            
+            # Verify warning was logged with correct count
+            mock_logger.warning.assert_called_once_with(
+                f"Deleting 3 existing documents for corpus_id: {corpus_id}"
+            )
+            # Verify delete was called
+            mock_query.delete.assert_called_once()
+    
+    def test_delete_existing_corpus_single_document(self):
+        """Test _delete_existing_corpus with single document"""
+        corpus_id = "single-doc-corpus"
+        
+        # Mock query that returns 1 document
+        mock_query = MagicMock()
+        self.session.query.return_value = mock_query
+        mock_query.filter.return_value = mock_query
+        mock_query.count.return_value = 1
+        
+        with patch("pgvector_template.core.manager.logger") as mock_logger:
+            self.manager._delete_existing_corpus(corpus_id)
+            
+            # Verify warning was logged with count of 1
+            mock_logger.warning.assert_called_once_with(
+                f"Deleting 1 existing documents for corpus_id: {corpus_id}"
+            )
+            mock_query.delete.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()
