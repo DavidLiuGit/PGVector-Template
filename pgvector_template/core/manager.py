@@ -105,6 +105,15 @@ class BaseCorpusManager(ABC):
             documents=chunks,
         )
 
+    def _generate_corpus_id(
+        self, corpus_id: UUID | str | None = None, content: str | None = None
+    ) -> UUID | str:
+        """
+        Helper to generate a corpus_id if not provided.
+        Override this method to provide a consistent way to generate.
+        """
+        return corpus_id if corpus_id else uuid4()
+
     def insert_corpus(
         self,
         content: str,
@@ -126,8 +135,7 @@ class BaseCorpusManager(ABC):
         Returns:
             int: The number of **documents** inserted for the provided corpus
         """
-        if not corpus_id:
-            corpus_id = uuid4()
+        corpus_id = self._generate_corpus_id(corpus_id)
         document_contents = self._split_corpus(content)
         document_embeddings = self.embedding_provider.embed_batch(document_contents)
         return self.insert_documents(
